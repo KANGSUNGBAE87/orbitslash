@@ -3,6 +3,7 @@ import {
   enemyTouchesImpactZone,
   resolveLineHits,
   resolveLiveSegmentHits,
+  resolveLiveSegmentDirectionalRejects,
   segmentIntersectsCircle,
   multiCutTier,
 } from "./CollisionSystem";
@@ -23,6 +24,7 @@ const enemyAt = (id: number, x: number, y: number, radiusPx = 10): EnemyState =>
   approachSpeed: 0,
   radiusPx,
   earthImpactRadiusPx: 13,
+  directional: false,
   hp: 1,
   damage: 5,
   score: 100,
@@ -155,6 +157,22 @@ describe("resolveLineHits", () => {
 
     expect(resolveLineHits(line, enemies, 0, 0, 50, zones)).toEqual([]);
   });
+
+  it("Solar Lance line hit도 방향 적의 절단 방향을 검사한다", () => {
+    const enemies = [
+      {
+        ...enemyAt(1, 170, 0, 10),
+        directional: true,
+        directionalSlashAngleRad: 0,
+        directionalToleranceDeg: 30,
+      },
+    ];
+
+    expect(resolveLineHits(seg(100, 0, 240, 0), enemies, 0, 0, 50, zones)).toEqual([
+      { enemyId: 1, band: "mid", accuracy: "directional" },
+    ]);
+    expect(resolveLineHits(seg(170, -80, 170, 80), enemies, 0, 0, 50, zones)).toEqual([]);
+  });
 });
 
 describe("resolveLiveSegmentHits", () => {
@@ -194,6 +212,67 @@ describe("resolveLiveSegmentHits", () => {
         hitRadiusScaleForEnemy: () => 1.5,
       }).map((h) => h.enemyId),
     ).toEqual([1]);
+  });
+
+  it("방향 적은 맞는 절단 방향일 때만 directional hit를 반환한다", () => {
+    const enemies = [
+      {
+        ...enemyAt(1, 170, 0, 10),
+        directional: true,
+        directionalSlashAngleRad: 0,
+        directionalToleranceDeg: 30,
+      },
+    ];
+
+    const correct = resolveLiveSegmentHits(seg(100, 0, 240, 0), enemies, 0, 0, 50, zones, {
+      minSegmentLengthPx: 12,
+    });
+    const wrong = resolveLiveSegmentHits(seg(170, -80, 170, 80), enemies, 0, 0, 50, zones, {
+      minSegmentLengthPx: 12,
+    });
+
+    expect(correct).toEqual([{ enemyId: 1, band: "mid", accuracy: "directional" }]);
+    expect(wrong).toEqual([]);
+  });
+
+  it("방향 적에 닿았지만 방향이 틀리면 reject 피드백 대상을 반환한다", () => {
+    const enemies = [
+      {
+        ...enemyAt(1, 170, 0, 10),
+        directional: true,
+        directionalSlashAngleRad: 0,
+        directionalToleranceDeg: 30,
+      },
+    ];
+
+    expect(
+      resolveLiveSegmentDirectionalRejects(seg(170, -80, 170, 80), enemies, 0, 0, 50, zones, {
+        minSegmentLengthPx: 12,
+      }),
+    ).toEqual([{ enemyId: 1, band: "mid" }]);
+  });
+
+  it("같은 선분에 정상 hit가 섞여도 방향 틀린 적은 reject 대상으로 남긴다", () => {
+    const enemies = [
+      enemyAt(1, 100, 0, 10),
+      {
+        ...enemyAt(2, 170, 0, 10),
+        directional: true,
+        directionalSlashAngleRad: Math.PI / 2,
+        directionalToleranceDeg: 30,
+      },
+    ];
+
+    expect(
+      resolveLiveSegmentHits(seg(0, 0, 240, 0), enemies, 0, 0, 50, zones, {
+        minSegmentLengthPx: 12,
+      }).map((h) => h.enemyId),
+    ).toEqual([1]);
+    expect(
+      resolveLiveSegmentDirectionalRejects(seg(0, 0, 240, 0), enemies, 0, 0, 50, zones, {
+        minSegmentLengthPx: 12,
+      }),
+    ).toEqual([{ enemyId: 2, band: "mid" }]);
   });
 
   it("같은 stroke에서 이미 맞은 적은 중복 데미지 대상에서 제외한다", () => {

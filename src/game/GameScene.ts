@@ -1,4 +1,4 @@
-import { Container, Graphics, Rectangle, type FederatedPointerEvent } from "pixi.js";
+import { Container, Graphics, Rectangle, Sprite, Texture, type FederatedPointerEvent } from "pixi.js";
 import { BASE_WIDTH, BASE_HEIGHT, EARTH_BODY_RADIUS, EARTH_GAMEPLAY_RADIUS, distance } from "./coords";
 import { LAYER } from "./layers";
 import { Earth } from "./Earth";
@@ -8,17 +8,23 @@ import { WaveGenerator } from "./WaveGenerator";
 import { ObjectManager } from "./ObjectManager";
 import { OrbitSpawner } from "./OrbitSpawner";
 import { GestureSystem } from "./GestureSystem";
-import { enemyTouchesImpactZone, resolveLineHits, resolveLiveSegmentHits, multiCutTier } from "./CollisionSystem";
+import { enemyTouchesImpactZone, resolveLineHits, resolveLiveSegmentHits, resolveLiveSegmentDirectionalRejects, multiCutTier } from "./CollisionSystem";
 import { ScoringSystem, comboMultiplierFor } from "./ScoringSystem";
 import { EnergySystem } from "./EnergySystem";
 import { SkillSystem } from "./SkillSystem";
+import { RunSession } from "./RunSession";
+import { Telemetry } from "./Telemetry";
 import { stepEnemy, enemyXY } from "./Enemy";
-import { readDevNumberParam } from "./DevQa";
+import { readDevNumberParam, readDevStringParam } from "./DevQa";
 import { feedbackForHitBand } from "./HitFeedback";
+import { requiredDirectionalSlashAngleRad } from "./DirectionalCut";
 import { pathLength, trimPathToMaxLength } from "./gesture-helpers";
 import { StrokeHitTracker } from "./StrokeHitTracker";
 import { enemyHitShakeOffset } from "./HitShake";
 import { shouldReserveLiveSlashForSolarLance } from "./SolarLanceReserve";
+import { shouldReserveLiveSlashForGravitySlow } from "./GravitySlowReserve";
+import { groupByComboTimeout } from "./ComboTiming";
+import { buildSkillCooldownSlots } from "./SkillCooldownSlots";
 import {
   ENEMY_HIT_SHAKE_DURATION_MS,
   ENEMY_HIT_SHAKE_INTENSITY_PX,
@@ -33,11 +39,14 @@ import {
 import { SlashTrail } from "../render/SlashTrail";
 import { LaserVfx } from "../render/LaserVfx";
 import { HitBurst } from "../render/HitBurst";
+import { DestructionBurst } from "../render/DestructionBurst";
+import { drawDirectionalGuide, drawEnemyVisual, enemyTexture } from "../render/EnemyVisual";
 import { Hud } from "../render/Hud";
 import { ResultOverlay } from "../render/ResultOverlay";
 import { multiCutLabel, lastSaveLabel, multiplierLabel } from "../ui/hud-labels";
 import { t } from "../i18n";
-import type { Point, EnemyState, EarthRef, ZoneTable, EnemyTable, ScoringConfig, DifficultyTable, SkillTable, OrbitProfile, HitResult, Segment } from "./types";
+import { LocalBackendAdapter } from "../platform/BackendAdapter";
+import type { Point, EnemyState, EarthRef, ZoneTable, EnemyTable, ScoringConfig, DifficultyTable, SkillTable, OrbitProfile, WaveTable, HitResult, Segment, SpawnSpec } from "./types";
 
 // 한 판 플레이 씬 (implementation-plan §1, §4 게임 루프).
 // 고정 update 순서 (§4.1): input(이벤트) → spawn → movement → collision(지구) → scoring(이벤트) → render.
@@ -46,6 +55,8 @@ import type { Point, EnemyState, EarthRef, ZoneTable, EnemyTable, ScoringConfig,
 const DIFFICULTY = "rookie"; // Phase 1: 단일 난이도 (오픈이슈 #2)
 const GAUGE_MAX = 100;
 const NORMAL_SLASH_DAMAGE = 1;
+const DEV_QA_PRESETS = ["directional", "lastSave", "dense"] as const;
+type DevQaPreset = (typeof DEV_QA_PRESETS)[number];
 
 interface PendingKill {
   hit: HitResult;
@@ -53,12 +64,22 @@ interface PendingKill {
   type: string;
   x: number;
   y: number;
+  hitAtMs: number;
 }
 
 interface EnemyHitFeedbackState {
   elapsedMs: number;
   durationMs: number;
   intensityPx: number;
+}
+
+interface EnemySpriteNode {
+  container: Container;
+  image: Sprite;
+  fallback: Graphics;
+  overlay: Graphics;
+  type?: string;
+  textureReady: boolean;
 }
 
 // 적 깊이감: 멀리 0.6 → 가까이 1.3 (design §11.2)
@@ -69,14 +90,6 @@ function depthScale(radius: number, R: number, swell: number): number {
   return 0.6 + tt * 0.7;
 }
 
-// 적 타입별 플레이스홀더 색 (에셋 교체 전 — design §1.2 danger 계열). Phase 1.
-const ENEMY_COLOR: Record<string, { fill: number; rim: number }> = {
-  small_meteor: { fill: 0x8a8f9c, rim: 0xff8a3d },
-  basic_meteor: { fill: 0x7c8493, rim: 0xff7a2e },
-  fast_comet: { fill: 0xffae5c, rim: 0xff5a2e },
-  heavy_asteroid: { fill: 0x6b7280, rim: 0xff6b2e },
-};
-
 export class GameScene {
   readonly stage: Container;
   private earth: Earth;
@@ -84,6 +97,7 @@ export class GameScene {
   private slashTrail: SlashTrail;
   private laser: LaserVfx;
   private hitBurst: HitBurst;
+  private destructionBurst: DestructionBurst;
   private hud: Hud;
   private result: ResultOverlay;
 
@@ -93,6 +107,7 @@ export class GameScene {
   private readonly difficulty: DifficultyTable;
   private readonly skillTable: SkillTable;
   private readonly orbits: OrbitProfile[];
+  private readonly waves: WaveTable;
   private readonly zones: ZoneTable;
 
   // 시스템 (한 판마다 재생성)
@@ -102,16 +117,20 @@ export class GameScene {
   private scoring!: ScoringSystem;
   private energy!: EnergySystem;
   private skills!: SkillSystem;
+  private runSession!: RunSession;
+  private readonly backend = new LocalBackendAdapter();
   private gesture = new GestureSystem();
 
   // 적 스프라이트 (간단 풀)
-  private sprites = new Map<number, Graphics>();
-  private spritePool: Graphics[] = [];
+  private sprites = new Map<number, EnemySpriteNode>();
+  private spritePool: EnemySpriteNode[] = [];
 
   // 런 상태
   private running = false;
   private elapsedMs = 0;
   private gauge = 0;
+  private gravitySlowRemainingMs = 0;
+  private gravitySlowMultiplier = 1;
   private livePoints: Point[] = [];
   private strokeHitTracker = new StrokeHitTracker({
     exitMarginPx: SAME_STROKE_REHIT_EXIT_MARGIN_PX,
@@ -120,6 +139,7 @@ export class GameScene {
   private strokeHadHit = false;
   private strokeKills: PendingKill[] = [];
   private strokeMoved = false;
+  private strokeDirectionalRejects = new Set<number>();
   private enemyHitFeedback = new Map<number, EnemyHitFeedbackState>();
 
   constructor() {
@@ -132,6 +152,7 @@ export class GameScene {
     this.difficulty = RemoteConfig.getDifficulty();
     this.skillTable = RemoteConfig.getSkills();
     this.orbits = RemoteConfig.getOrbits();
+    this.waves = RemoteConfig.getWaves();
     this.zones = this.difficulty.zones;
 
     // L0 배경
@@ -166,8 +187,9 @@ export class GameScene {
     // L9 슬래시/레이저 VFX
     this.slashTrail = new SlashTrail();
     this.laser = new LaserVfx();
+    this.destructionBurst = new DestructionBurst();
     this.hitBurst = new HitBurst();
-    this.stage.addChild(this.slashTrail.container, this.laser.container, this.hitBurst.container);
+    this.stage.addChild(this.slashTrail.container, this.laser.container, this.destructionBurst.container, this.hitBurst.container);
 
     // L11~ HUD + 결과 오버레이
     this.hud = new Hud();
@@ -192,23 +214,66 @@ export class GameScene {
     const diff = this.difficulty[DIFFICULTY] as unknown as { earthEnergy: number; gravitySwell: number };
     let seedOverride: number | undefined;
     let gaugeOverride: number | undefined;
+    let qaPreset: DevQaPreset | undefined;
     if (import.meta.env.DEV && typeof window !== "undefined") {
       const search = window.location.search;
       seedOverride = readDevNumberParam(search, "seed", { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true });
       gaugeOverride = readDevNumberParam(search, "qaGauge", { min: 0, max: GAUGE_MAX });
+      qaPreset = readDevStringParam(search, "qaPreset", DEV_QA_PRESETS);
     }
     this.objects = new ObjectManager();
     this.spawner = new OrbitSpawner(this.enemies, this.objects);
-    this.wave = new WaveGenerator(createRng(seedOverride ?? Date.now()), { difficulty: DIFFICULTY }, this.enemies, this.difficulty, this.orbits);
+    const runStart = this.backend.beginLocalRun(DIFFICULTY, seedOverride ?? (Date.now() >>> 0));
+    this.runSession = new RunSession(runStart);
+    this.wave = new WaveGenerator(createRng(runStart.seed), { difficulty: runStart.difficulty }, this.enemies, this.difficulty, this.orbits, this.waves);
     this.scoring = new ScoringSystem(this.scoringCfg);
     this.energy = new EnergySystem(diff.earthEnergy);
     this.skills = new SkillSystem(this.skillTable);
     this.gauge = gaugeOverride ?? (this.skillTable._debug.instantFillGauge ? GAUGE_MAX : 0);
     this.elapsedMs = 0;
+    this.gravitySlowRemainingMs = 0;
+    this.gravitySlowMultiplier = 1;
     this.running = true;
     this.enemyHitFeedback.clear();
     this.earth.setVisualState("healthy");
     this.resetStrokeState();
+    this.spawnDevQaPreset(qaPreset);
+  }
+
+  private spawnDevQaPreset(preset: DevQaPreset | undefined): void {
+    if (!preset) return;
+    const make = (enemyType: string, startAngleRad: number, startRadius: number, spawnAtMs = 0): SpawnSpec => {
+      const def = this.enemies[enemyType]!;
+      return {
+        enemyType,
+        spawnAtMs,
+        startAngleRad,
+        startRadius,
+        angularSpeed: def.angularSpeed,
+        approachSpeed: def.approachSpeed,
+      };
+    };
+
+    if (preset === "directional") {
+      this.spawner.spawn([
+        make("directional_comet", 0, 360),
+        make("basic_meteor", Math.PI * 0.7, 430),
+      ]);
+      return;
+    }
+
+    if (preset === "lastSave") {
+      this.spawner.spawn([make("basic_meteor", 0, EARTH_GAMEPLAY_RADIUS * 1.75)]);
+      return;
+    }
+
+    this.spawner.spawn([
+      make("small_meteor", 0, 420),
+      make("basic_meteor", Math.PI * 0.35, 460),
+      make("fast_comet", Math.PI * 0.72, 500),
+      make("heavy_asteroid", Math.PI * 1.1, 520),
+      make("directional_comet", Math.PI * 1.45, 560),
+    ]);
   }
 
   private restart(): void {
@@ -216,13 +281,26 @@ export class GameScene {
     this.sprites.clear();
     this.slashTrail.release([]);
     this.result.hide();
+    this.destructionBurst.clear();
     this.hitBurst.clear();
+    Telemetry.flush();
     this.startRun();
   }
 
   private endRun(): void {
     this.running = false;
-    this.result.show(this.scoring.snapshot(), this.elapsedMs);
+    const snap = this.scoring.snapshot();
+    const summary = this.runSession.finish({
+      survivalMs: this.elapsedMs,
+      score: snap.score,
+      kills: snap.kills,
+      maxCombo: snap.maxCombo,
+      lastSaveCount: snap.lastSaveCount,
+      remainingEnergy: this.energy.getEnergy(),
+    });
+    Telemetry.track("death", { difficulty: summary.difficulty, score: summary.score, survivalMs: summary.survivalMs });
+    Telemetry.flush();
+    this.result.show(snap, this.elapsedMs);
   }
 
   // ── 포인터 입력 (Instant Judgment) ───────────────────────────────────────
@@ -258,6 +336,7 @@ export class GameScene {
 
     const earth = this.earth.ref();
     if (this.shouldReserveStrokeForSolarLance(this.livePoints, earth)) return;
+    if (this.shouldReserveStrokeForGravitySlow(this.livePoints, earth)) return;
     this.resolveLiveSlashSegment(seg, earth);
   }
 
@@ -274,18 +353,15 @@ export class GameScene {
   /** release-time 스킬/정산 판정. 일반 베기 contact hit는 pointer-move에서 처리한다. */
   private resolveInput(points: Point[], earth: EarthRef): void {
     const committedMovement = pathLength(points) >= MISS_COMMIT_DISTANCE_PX;
-    const act =
-      !this.strokeHadHit
-        ? this.skills.trySolarLance(
-            this.gestureResultFromPoints(points, earth),
-            { earth, gauge: this.gauge, screenShortSide: BASE_WIDTH },
-          )
-        : null;
+    const gesture = this.gestureResultFromPoints(points, earth);
+    const act = !this.strokeHadHit ? this.skills.trySolarLance(gesture, { earth, gauge: this.gauge, screenShortSide: BASE_WIDTH }) : null;
 
     if (act) {
       if (!this.skillTable._debug.infiniteGauge) {
         this.gauge = Math.max(0, this.gauge - this.skillTable.solar_lance.gaugeCost);
       }
+      this.runSession.recordSkillUse("solar_lance");
+      Telemetry.track("skill_fire", { skillId: "solar_lance" });
       this.laser.fire(act.vfxLine); // 연출 — 판정 불변
       const lanceKills = this.applyHits(
         resolveLineHits(act.vfxLine, this.objects.getAlive(), earth.cx, earth.cy, earth.r, this.zones, {
@@ -300,10 +376,30 @@ export class GameScene {
       return;
     }
 
+    const slow = !this.strokeHadHit ? this.skills.tryGravitySlow(gesture, { earth, gauge: this.gauge, screenShortSide: BASE_WIDTH }) : null;
+    if (slow) {
+      if (!this.skillTable._debug.infiniteGauge) {
+        this.gauge = Math.max(0, this.gauge - this.skillTable.gravity_slow.gaugeCost);
+      }
+      this.gravitySlowRemainingMs = slow.durationMs;
+      this.gravitySlowMultiplier = slow.slowMultiplier;
+      this.runSession.recordSkillUse("gravity_slow");
+      Telemetry.track("skill_fire", { skillId: "gravity_slow" });
+      this.hitBurst.spawn(earth.cx, earth.cy, t("skill.gravity_slow"), 0x7dd3fc, EARTH_BODY_RADIUS * 1.8, false, {
+        labelScale: 0.95,
+        ringWidth: 4,
+        lifeMs: 700,
+      });
+      this.hud.flashBanner(t("skill.gravity_slow"), 0x7dd3fc);
+      this.objects.prune();
+      return;
+    }
+
     if (this.strokeKills.length > 0) {
       this.commitKills(this.strokeKills, earth, true);
     } else if (committedMovement && !this.strokeHadHit) {
       this.scoring.onMiss(); // 탭/짧은 입력은 neutral, 의미 있는 빈 슬래시만 콤보 끊김.
+      Telemetry.track("combo_break", { reason: "miss" });
     }
     this.objects.prune();
   }
@@ -313,6 +409,7 @@ export class GameScene {
     this.strokeHadHit = false;
     this.strokeKills = [];
     this.strokeMoved = false;
+    this.strokeDirectionalRejects.clear();
   }
 
   private resolveLiveSlashSegment(segment: Segment, earth: EarthRef): void {
@@ -322,6 +419,7 @@ export class GameScene {
       hitRadiusScaleForEnemy: (enemy) => this.enemyVisualScale(enemy),
       canHitEnemy: (enemy) => this.strokeHitTracker.canHit(enemy.id, segment.b.t),
     });
+    this.spawnDirectionalRejectFeedback(segment, earth);
     if (hits.length === 0) {
       this.updateStrokeHitRearm(segment);
       return;
@@ -334,6 +432,29 @@ export class GameScene {
     }
     this.updateStrokeHitRearm(segment);
     this.objects.prune();
+  }
+
+  private spawnDirectionalRejectFeedback(segment: Segment, earth: EarthRef): void {
+    const rejects = resolveLiveSegmentDirectionalRejects(segment, this.objects.getAlive(), earth.cx, earth.cy, earth.r, this.zones, {
+      minSegmentLengthPx: LIVE_SEGMENT_MIN_LENGTH_PX,
+      hitRadiusInflatePx: NORMAL_SLASH_HIT_INFLATE_PX,
+      hitRadiusScaleForEnemy: (enemy) => this.enemyVisualScale(enemy),
+      canHitEnemy: (enemy) => this.strokeHitTracker.canHit(enemy.id, segment.b.t) && !this.strokeDirectionalRejects.has(enemy.id),
+    });
+    for (const reject of rejects) {
+      this.strokeDirectionalRejects.add(reject.enemyId);
+      const enemy = this.objects.getAlive().find((en) => en.id === reject.enemyId);
+      if (!enemy) continue;
+      Telemetry.track("directional_reject", { enemyType: enemy.type, band: reject.band });
+      const pos = enemyXY(enemy);
+      this.destructionBurst.spawn(pos.x, pos.y, {
+        color: 0x64748b,
+        secondaryColor: 0x8ff3ff,
+        radius: Math.max(28, enemy.radiusPx * this.enemyVisualScale(enemy) * 0.52),
+        particleCount: 7,
+        lifeMs: 240,
+      });
+    }
   }
 
   private updateStrokeHitRearm(segment: Segment): void {
@@ -366,6 +487,7 @@ export class GameScene {
         type: result.enemy.type,
         x: pos.x,
         y: pos.y,
+        hitAtMs,
       });
       this.removeSprite(h.enemyId);
     }
@@ -377,29 +499,56 @@ export class GameScene {
 
     const scoreById = new Map(kills.map((k) => [k.hit.enemyId, k.score] as const));
     const typeById = new Map(kills.map((k) => [k.hit.enemyId, k.type] as const));
-    const res = this.scoring.onHit(
-      kills.map((k) => k.hit),
-      (id) => scoreById.get(id) ?? 0,
-      (id) => typeById.get(id) ?? "",
-    );
-    this.gauge = Math.min(GAUGE_MAX, this.gauge + res.gauge);
+    const groups = groupByComboTimeout(kills, this.scoringCfg.comboChainTimeoutMs ?? 650);
 
     if (!visualsAlreadyShown) {
       for (const kill of kills) this.spawnKillFeedback(kill);
     }
 
-    const tier = multiCutTier(kills.length);
-    if (tier !== "none") this.hud.flashBanner(multiCutLabel(tier), 0xffc14d);
-    if (res.lastSave) {
-      this.hitBurst.spawn(earth.cx, earth.cy, lastSaveLabel(), 0x3fd8ff, EARTH_BODY_RADIUS * 2.4, true);
-      this.earth.flashLastSave();
-      this.hud.flashBanner(lastSaveLabel(), 0x3fd8ff);
+    for (const group of groups) {
+      const res = this.scoring.onHit(
+        group.map((k) => k.hit),
+        (id) => scoreById.get(id) ?? 0,
+        (id) => typeById.get(id) ?? "",
+        group[group.length - 1]?.hitAtMs,
+      );
+      this.gauge = Math.min(GAUGE_MAX, this.gauge + res.gauge);
+
+      const tier = multiCutTier(group.length);
+      if (tier !== "none") this.hud.flashBanner(multiCutLabel(tier), 0xffc14d);
+      if (res.lastSave) {
+        this.destructionBurst.spawn(earth.cx, earth.cy, {
+          color: 0x3fd8ff,
+          secondaryColor: 0xffffff,
+          radius: EARTH_BODY_RADIUS * 1.15,
+          particleCount: 32,
+          lifeMs: 920,
+          isLastSave: true,
+        });
+        this.hitBurst.spawn(earth.cx, earth.cy, lastSaveLabel(), 0x3fd8ff, EARTH_BODY_RADIUS * 2.8, true, {
+          labelScale: 1.25,
+          ringWidth: 7,
+          lifeMs: 920,
+        });
+        this.earth.flashLastSave();
+        this.hud.flashBanner(lastSaveLabel(), 0x3fd8ff);
+        Telemetry.track("last_save", { difficulty: DIFFICULTY });
+      }
     }
   }
 
   private spawnKillFeedback(kill: PendingKill): void {
     const feedback = feedbackForHitBand(kill.hit.band, this.scoringCfg);
-    this.hitBurst.spawn(kill.x, kill.y, multiplierLabel(feedback.multiplier), feedback.color, feedback.radius, feedback.isLastSave);
+    this.destructionBurst.spawn(kill.x, kill.y, {
+      color: feedback.color,
+      radius: feedback.radius,
+      particleCount: feedback.particleCount,
+      isLastSave: feedback.isLastSave,
+    });
+    this.hitBurst.spawn(kill.x, kill.y, multiplierLabel(feedback.multiplier), feedback.color, feedback.radius, feedback.isLastSave, {
+      labelScale: feedback.labelScale,
+      ringWidth: feedback.ringWidth,
+    });
   }
 
   private triggerEnemyHitFeedback(enemyId: number): void {
@@ -428,6 +577,18 @@ export class GameScene {
     });
   }
 
+  private shouldReserveStrokeForGravitySlow(points: Point[], earth: EarthRef): boolean {
+    return shouldReserveLiveSlashForGravitySlow(points, earth, {
+      strokeHadHit: this.strokeHadHit,
+      skillReady: this.skills.isReady("gravity_slow"),
+      gauge: this.gauge,
+      gaugeCost: this.skillTable.gravity_slow.gaugeCost,
+      infiniteGauge: this.skillTable._debug.infiniteGauge,
+      circleTurnMinRad: this.skillTable.gravity_slow.circleTurnMinRad ?? 4.8,
+      closeMaxRatio: this.skillTable.gravity_slow.closeMaxRatio ?? 0.3,
+    });
+  }
+
   /** GestureSystem 없이 점 배열만으로 분류 결과 생성 (Solar Lance 판정용). */
   private gestureResultFromPoints(points: Point[], earth: EarthRef) {
     return this.gesture.classify(points, earth);
@@ -435,17 +596,27 @@ export class GameScene {
 
   // ── 적 스프라이트 풀 ──────────────────────────────────────────────────────
 
-  private acquireSprite(): Graphics {
-    const g = this.spritePool.pop() ?? new Graphics();
-    g.visible = true;
-    return g;
+  private acquireSprite(): EnemySpriteNode {
+    const node = this.spritePool.pop();
+    if (node) {
+      node.container.visible = true;
+      return node;
+    }
+    const container = new Container();
+    const image = new Sprite(Texture.EMPTY);
+    image.anchor.set(0.5);
+    const fallback = new Graphics();
+    const overlay = new Graphics();
+    container.addChild(fallback, image, overlay);
+    return { container, image, fallback, overlay, textureReady: false };
   }
 
-  private releaseSprite(g: Graphics): void {
-    g.clear();
-    g.visible = false;
-    if (g.parent) g.parent.removeChild(g);
-    this.spritePool.push(g);
+  private releaseSprite(node: EnemySpriteNode): void {
+    node.fallback.clear();
+    node.overlay.clear();
+    node.container.visible = false;
+    if (node.container.parent) node.container.parent.removeChild(node.container);
+    this.spritePool.push(node);
   }
 
   private removeSprite(id: number): void {
@@ -456,13 +627,27 @@ export class GameScene {
     }
   }
 
-  private drawEnemySprite(g: Graphics, en: EnemyState): void {
-    const c = ENEMY_COLOR[en.type] ?? { fill: 0x8a8f9c, rim: 0xff7a2e };
-    g.clear();
-    g.circle(0, 0, en.radiusPx).fill({ color: c.fill });
-    g.circle(0, 0, en.radiusPx).stroke({ width: 3, color: c.rim, alpha: 0.85 });
-    // 작은 균열 하이라이트
-    g.circle(-en.radiusPx * 0.3, -en.radiusPx * 0.3, en.radiusPx * 0.25).fill({ color: 0xffffff, alpha: 0.08 });
+  private drawEnemySprite(node: EnemySpriteNode, en: EnemyState): void {
+    if (node.type !== en.type) {
+      node.type = en.type;
+      node.textureReady = false;
+      node.image.texture = Texture.EMPTY;
+    }
+    const texture = enemyTexture(en.type);
+    if (texture && !node.textureReady) {
+      node.image.texture = texture;
+      node.textureReady = true;
+    }
+    node.image.width = en.radiusPx * 2;
+    node.image.height = en.radiusPx * 2;
+    node.image.visible = node.textureReady;
+    node.fallback.visible = !node.textureReady;
+    if (!node.textureReady) {
+      drawEnemyVisual(node.fallback, en);
+    } else {
+      node.fallback.clear();
+    }
+    drawDirectionalGuide(node.overlay, en, en.directional ? requiredDirectionalSlashAngleRad(en) : undefined);
   }
 
   // ── 메인 update (RAF) ─────────────────────────────────────────────────────
@@ -471,17 +656,25 @@ export class GameScene {
     if (this.running) {
       this.elapsedMs += dtMs;
       this.skills.tick(dtMs);
+      if (this.gravitySlowRemainingMs > 0) {
+        this.gravitySlowRemainingMs = Math.max(0, this.gravitySlowRemainingMs - dtMs);
+        if (this.gravitySlowRemainingMs === 0) this.gravitySlowMultiplier = 1;
+      }
 
       // spawn
-      this.spawner.spawn(this.wave.next(this.elapsedMs));
+      const spawns = this.wave.next(this.elapsedMs);
+      for (const spawn of spawns) Telemetry.track("spawn", { enemyType: spawn.enemyType, difficulty: DIFFICULTY });
+      this.spawner.spawn(spawns);
 
       // movement + 지구 충돌
       const diff = this.difficulty[DIFFICULTY] as unknown as { gravitySwell: number };
+      const movementDtMs = this.gravitySlowRemainingMs > 0 ? dtMs * this.gravitySlowMultiplier : dtMs;
       for (const en of this.objects.getAlive()) {
-        stepEnemy(en, dtMs);
+        stepEnemy(en, movementDtMs);
         if (enemyTouchesImpactZone(en.radius, en.radiusPx, EARTH_GAMEPLAY_RADIUS, this.zones, diff.gravitySwell, en.earthImpactRadiusPx)) {
           const r = this.energy.applyDamage(en.damage);
           this.scoring.onMiss(); // 지구 피격 = 콤보 끊김
+          Telemetry.track("combo_break", { reason: "earth_hit" });
           this.objects.kill(en.id);
           this.removeSprite(en.id);
           this.earth.setVisualState(this.energy.visualState());
@@ -501,16 +694,18 @@ export class GameScene {
         if (!g) {
           g = this.acquireSprite();
           this.drawEnemySprite(g, en);
-          this.enemyLayer.addChild(g);
+          this.enemyLayer.addChild(g.container);
           this.sprites.set(en.id, g);
+        } else if (en.directional || !g.textureReady) {
+          this.drawEnemySprite(g, en);
         }
         const pos = enemyXY(en);
         const hitFeedback = this.enemyHitFeedback.get(en.id);
         const shake = hitFeedback
           ? enemyHitShakeOffset(en.id, hitFeedback.elapsedMs, hitFeedback.intensityPx, hitFeedback.durationMs)
           : { x: 0, y: 0, scale: 1 };
-        g.position.set(pos.x + shake.x, pos.y + shake.y);
-        g.scale.set(this.enemyVisualScale(en) * shake.scale);
+        g.container.position.set(pos.x + shake.x, pos.y + shake.y);
+        g.container.scale.set(this.enemyVisualScale(en) * shake.scale);
       }
     } else {
       this.updateEnemyHitFeedback(dtMs);
@@ -520,6 +715,7 @@ export class GameScene {
     this.earth.update(dtMs);
     this.slashTrail.update(dtMs);
     this.laser.update(dtMs);
+    this.destructionBurst.update(dtMs);
     this.hitBurst.update(dtMs);
 
     const snap = this.scoring.snapshot();
@@ -546,20 +742,10 @@ export class GameScene {
     const defs = [
       { id: "solar_lance", label: t("skill.solar_lance"), cost: this.skillTable.solar_lance.gaugeCost, active: true },
       { id: "orbital_cut", label: t("skill.orbital_cut"), cost: this.skillTable.orbital_cut.gaugeCost, active: false },
-      { id: "gravity_slow", label: t("skill.gravity_slow"), cost: this.skillTable.gravity_slow.gaugeCost, active: false },
+      { id: "gravity_slow", label: t("skill.gravity_slow"), cost: this.skillTable.gravity_slow.gaugeCost, active: true },
       { id: "delta_shield", label: t("skill.delta_shield"), cost: this.skillTable.delta_shield.gaugeCost, active: false },
+      { id: "reserve_slot", label: t("skill.reserve_slot"), cost: this.skillTable.reserve_slot.gaugeCost, active: false },
     ];
-    return defs.map((slot) => {
-      const cooldownMs = this.skills?.cooldownRemaining(slot.id) ?? 0;
-      const ratio = Math.max(0, Math.min(1, this.gauge / slot.cost));
-      return {
-        id: slot.id,
-        label: slot.label,
-        ratio,
-        ready: slot.active && cooldownMs <= 0 && ratio >= 1,
-        cooldownMs,
-        active: slot.active,
-      };
-    });
+    return buildSkillCooldownSlots(defs, this.gauge, (skillId) => this.skills?.cooldownRemaining(skillId) ?? 0);
   }
 }

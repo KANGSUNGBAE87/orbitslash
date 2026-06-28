@@ -1,0 +1,43 @@
+{
+  "rookie": [
+    {
+      "fromMs": 0,
+      "spawnIntervalMs": 920,
+      "weights": {
+        "small_meteor": 58,
+        "basic_meteor": 34,
+        "fast_comet": 8
+      }
+    },
+    {
+      "fromMs": 30000,
+      "spawnIntervalMs": 820,
+      "weights": {
+        "small_meteor": 42,
+        "basic_meteor": 35,
+        "fast_comet": 13,
+        "heavy_asteroid": 6,
+        "directional_comet": 4
+      },
+      "maxConsecutive": {
+        "directional_comet": 2,
+        "heavy_asteroid": 2
+      }
+    },
+    {
+      "fromMs": 90000,
+      "spawnIntervalMs": 700,
+      "weights": {
+        "small_meteor": 28,
+        "basic_meteor": 35,
+        "fast_comet": 16,
+        "heavy_asteroid": 13,
+        "directional_comet": 8
+      },
+      "maxConsecutive": {
+        "directional_comet": 2,
+        "heavy_asteroid": 2
+      }
+    }
+  ]
+}

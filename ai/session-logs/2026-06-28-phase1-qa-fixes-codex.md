@@ -260,6 +260,146 @@ Not yet. Project-local release evidence only.
 
 ---
 
+## Continuation — Implementation Queue Batch
+
+- Date: 2026-06-28
+- Actor: codex
+- Stage: implementation
+
+### User Request
+
+사용자가 다음 구현 큐 전체를 서브에이전트와 함께 구현해 달라고 요청:
+방향 적 출현 빈도 조절, 웨이브/난이도 shaping, DEV-only QA harness, 스킬 5슬롯/다중
+스킬 확장, 에셋 교체, 랭킹/백엔드 준비, 플랫폼/릴리즈 준비. 이후 DEV-only QA
+harness는 QA에 포함되면 건너뛰어도 된다고 명시.
+
+### Subagents Used
+
+- `game-logic-reviewer`: directional enemy should be a separate low-frequency type; next real skill should be `gravity_slow`; 5th skill should stay as a reserve slot.
+- `toss-compliance-auditor`: keep backend/ranking behind adapters, draft SQL only, no SDK imports from product logic, no raw Toss IDs, and no public-open RLS.
+- `reviewer`: found early blockers in type narrowing, wave wiring, enemy visual wiring, and ranking integration. Main Codex corrected those before final verification.
+
+### Files Changed
+
+- `src/data/waves.json`, `src/game/WaveGenerator.ts`
+  - Added early/mid/late weighted wave bands.
+  - Opening wave excludes directional enemies; later waves introduce `directional_comet` at low frequency.
+- `src/data/enemies.json`
+  - Added `directional_comet`.
+  - Kept `fast_comet` as a normal non-directional enemy.
+- `src/game/SkillSystem.ts`, `src/game/GameScene.ts`, `src/data/skills.json`
+  - Added `gravity_slow` circle gesture, cooldown, gauge cost, slow duration, VFX/banner feedback, and top HUD slot state.
+  - Kept a 5th `reserve_slot` placeholder instead of inventing an unapproved skill.
+- `src/render/EnemyVisual.ts`
+  - Centralized procedural enemy visuals as the asset replacement boundary.
+- `src/game/RunSession.ts`, `src/game/RankingSystem.ts`, `src/platform/BackendAdapter.ts`
+  - Added run summary, skill-use counts, local run start token/seed, and backend adapter contract.
+- `src/game/Telemetry.ts`, `src/platform/ReleaseBoundary.ts`, `scripts/check-release-boundary.mjs`
+  - Added telemetry allowlist and release-boundary scan.
+- `supabase/migrations/20260628_orbitslash_ranking_draft.sql`
+  - Added local review-only Supabase draft tables with RLS enabled and no public-open policies.
+- `ai/plans/backend-contract.md`, `ai/reviews/release-checklist.md`, `ai/reviews/review.md`
+  - Recorded backend contract, release checklist, implemented items, remaining QA, and deferred QA harness.
+- `.env.example`
+  - Added public browser env placeholders and explicit server-secret warning.
+- `/Users/kangsungbae/Documents/지식저장소/projects/orbitslash/platform.md`
+  - Added cross-assistant platform note.
+
+### Deferred
+
+- DEV-only QA harness for deterministic Last Save/directional spawns is intentionally not implemented in this batch because Owner classified it as QA tooling.
+
+### Verification
+
+- `npm test` passed: 24 files / 139 tests.
+- `npm run typecheck` passed.
+- `npm run build` passed.
+- `npm run preflight:release-boundary` passed.
+- Local Chrome mobile smoke at `http://127.0.0.1:5179/?seed=20260628&qaGauge=100`:
+  - Pixi canvas loaded at `412x915` CSS / `824x1830` backing pixels.
+  - No console messages or page errors.
+  - Smoke screenshot: `/tmp/orbitslash-implementation-queue-smoke.png`.
+- cmm index status could not be read because the MCP transport returned `Transport closed`; direct source verification and tests were used instead.
+
+### Remaining Risks Before Release
+
+- Real-device touch/readability QA is still required for latest local changes.
+- Public ranking strategy is undecided: Supabase verified ranking, Apps in Toss leaderboard, or hybrid.
+- Supabase migration is a local draft only; remote apply is not done.
+- Final sprites/assets are not replaced yet; only the replacement boundary is ready.
+- Store release order and platform packaging need Owner confirmation plus official-doc re-check.
+
+### Promote to 지식저장소?
+
+Yes, lightweight platform note added at `/Users/kangsungbae/Documents/지식저장소/projects/orbitslash/platform.md`.
+
+---
+
+## Continuation — Remaining Issues Implementation
+
+- Date: 2026-06-28
+- Actor: codex
+- Stage: implementation + backend provisioning
+
+### User Request
+
+사용자가 남은 핵심 이슈 전체를 서브에이전트와 함께 구현하고, 남은 QA와 추가 작업을 알려 달라고 요청.
+
+### Subagents Used
+
+- `game-logic-reviewer`
+  - Gravity Slow reserve/close-gap risk, inactive HUD slot confusion, directional anti-streak, top-HUD spawn overlap을 지적.
+- `toss-compliance-auditor`
+  - Hybrid ranking strategy를 추천. Remote Supabase apply는 public ranking launch가 아니라 dormant schema provisioning일 때만 조건부 가능하다고 판단.
+- `reviewer`
+  - Asset swap should stay inside render boundary, telemetry must be bounded/flushed, runtime should go through backend adapter, `orbitslash_scores.run_id` uniqueness needed.
+
+### Implemented
+
+- Ranking strategy:
+  - Added `RankingStrategy` with `hybrid:supabase_verified+apps_in_toss_leaderboard_bridge`.
+  - `GameScene` now creates local run starts through `LocalBackendAdapter`.
+- Remote Supabase:
+  - Applied `20260628_orbitslash_ranking_draft.sql`.
+  - Applied `20260628_orbitslash_ranking_hardening.sql`.
+  - Verified RLS enabled, no policies, unique run score index, and no anon/authenticated direct grants.
+- Gameplay QA support:
+  - Fixed Gravity Slow reserve path with shared `GravitySlowReserve`.
+  - Lowered Gravity Slow close ratio to `0.30`.
+  - Added inactive HUD slot gauge suppression.
+  - Added directional/heavy anti-streak.
+  - Added top-HUD safe start-angle adjustment.
+  - Added DEV QA presets: `directional`, `lastSave`, `dense`.
+- Assets:
+  - Added SVG enemy sprite assets under `public/assets/enemies/`.
+  - Swapped enemy rendering from pure `Graphics` circles to pooled `Container(Sprite + guide overlay)`.
+  - Kept collision/hitbox SSOT as `enemy.radiusPx`.
+- Telemetry:
+  - Added bounded local telemetry queue.
+  - Flushes local telemetry on restart/end-run.
+  - Removed misleading `run_submit` event from local game-over path.
+
+### Remaining QA
+
+- Real-device QA remains required for touch latency, slash feel, Gravity Slow success/false-positive rate, directional readability, Last Save feedback, dense VFX performance, top HUD readability, and final asset hit feel.
+- Official Apps in Toss and Google Play release docs still need a fresh release-stage re-check.
+- Public ranking remains disabled until Edge/server validation exists.
+
+### Verification
+
+- `npm test` passed: 28 files / 154 tests.
+- `npm run typecheck` passed.
+- `npm run build` passed.
+- `npm run preflight:release-boundary` passed.
+- Production bundle string check found no `qaPreset` / `qaGauge` strings in `dist`.
+- Local Chrome mobile smoke at `http://127.0.0.1:5180/?seed=20260628&qaGauge=100&qaPreset=dense`:
+  - Pixi canvas loaded at `412x915` CSS / `824x1830` backing pixels.
+  - All five enemy SVG assets returned HTTP 200.
+  - No console messages or page errors.
+  - Smoke screenshot: `/tmp/orbitslash-remaining-issues-smoke.png`.
+
+---
+
 ## Continuation — Realtime Slash Judgement Tuning
 
 - Date: 2026-06-28 16:27 KST
@@ -454,3 +594,153 @@ Next steps:
 1. Open the public URL on a real phone and test heavy multi-hit re-entry.
 2. Test Solar Lance after gauge is naturally full; if it is still hard to set up, add a DEV-only deterministic gauge/spawn harness.
 3. If heavy feels too easy, first raise `SAME_STROKE_REHIT_COOLDOWN_MS` to `100~120`, then consider lowering only `heavy_asteroid.radiusPx` to `104~116`.
+
+---
+
+## 2026-06-28 17:40 KST — Combo Chain Timeout
+
+User request:
+- Implement a rule so combo does not keep chaining indefinitely while a long drag continues.
+
+Decision:
+- Added `comboChainTimeoutMs = 650`.
+- A kill within `650ms` of the previous combo kill continues the combo.
+- A kill at `650ms` or later starts a fresh combo, even if it came from the same stroke.
+- Same-stroke re-entry hit remains valid; only combo chaining is time-gated.
+
+Files changed:
+- `src/data/scoring.json`
+- `src/game/ComboTiming.ts`
+- `src/game/ScoringSystem.ts`
+- `src/game/GameScene.ts`
+- `src/game/types.ts`
+- `src/game/ComboTiming.test.ts`
+- `src/game/ScoringSystem.test.ts`
+
+Verification:
+- TDD RED: `npm test -- src/game/ScoringSystem.test.ts src/game/ComboTiming.test.ts` failed because combo continued to `2` after `650ms` and `ComboTiming` did not exist.
+- GREEN: target tests passed, 26 tests.
+- Regression: `npm test` passed, 15 files / 109 tests.
+- Build: `npm run build` passed.
+
+Next steps:
+1. Real-phone QA for `650ms` combo timeout feel.
+2. If combo feels too strict, raise to `750ms`; if long-drag combo still feels too easy, lower to `550~600ms`.
+
+---
+
+## 2026-06-28 18:00 KST — Directional Cut First Pass
+
+User request:
+- Confirm whether directional slash was already implemented, then move to the next work.
+
+Finding:
+- Directional slash was not implemented yet. The project had `directional` data fields and scoring multipliers, but all hits were still emitted as `accuracy: "normal"`.
+
+Decision:
+- Implemented the first directional cut pass without deploying.
+- `fast_comet` is now the first directional enemy.
+- Directional enemies get a visible cyan cut guide line.
+- A segment whose orientation matches the enemy's required slash angle within tolerance returns `accuracy: "directional"`.
+- Wrong-direction contact is rejected, so it does not damage the enemy.
+- Directional hits add `gaugeGain.directionalCut` on top of the enemy's normal gauge gain.
+
+Files changed:
+- `src/data/enemies.json`
+- `src/game/DirectionalCut.ts`
+- `src/game/CollisionSystem.ts`
+- `src/game/Enemy.ts`
+- `src/game/GameScene.ts`
+- `src/game/ScoringSystem.ts`
+- `src/game/types.ts`
+- related tests under `src/game/*.test.ts`
+
+Verification:
+- TDD RED: directional tests failed because `DirectionalCut` did not exist, enemy directional state was undefined, collisions stayed `accuracy: "normal"`, and directional gauge was missing.
+- GREEN: targeted tests passed, 6 files / 74 tests.
+- Regression: `npm test` passed, 16 files / 117 tests.
+- Build: `npm run build` passed.
+- Local Chrome smoke at `http://127.0.0.1:5173/?qaGauge=100&seed=1234`: one canvas fills mobile viewport, no page errors.
+
+Remaining risks:
+- `fast_comet` now being directional may be too frequent because enemy type selection is currently uniform.
+- Wrong-direction rejection has no dedicated fail feedback yet.
+
+Next steps:
+1. Local/phone QA directional fast_comet visibility and strictness.
+2. If it appears too often, add spawn weighting or split a lower-frequency directional enemy type.
+3. Next Phase 2 work: destruction VFX, distance multiplier feedback, and stronger Last Save feedback.
+
+---
+
+## 2026-06-28 19:05 KST — Phase 2 Feedback + Directional Cut Hardening
+
+User request:
+- Continue items 3 and 4 using subagents.
+- No GitHub deployment needed.
+
+Subagent:
+- `game-logic-reviewer` reviewed current combo/directional/feedback risk.
+- Main finding adopted immediately: default directional slash angle must follow the enemy's current orbit tangent, not only the spawn angle.
+- Additional adopted feedback: wrong-direction contact should show a weak reject effect instead of feeling like ignored input.
+- `reviewer` performed a final read-only diff review.
+- Reviewer finding adopted immediately: wrong-direction reject feedback must still appear when the same segment also hits another enemy successfully.
+
+Decisions:
+- Added `DestructionBurst` as a separate Pixi explosion layer so score text/rings and particle destruction stay decoupled.
+- Distance multiplier feedback now scales by band: closer bands get larger label/ring/particle feedback; Last Save is the strongest.
+- Last Save now triggers a larger Earth-centered particle wave plus a stronger text/ring pulse.
+- Default directional enemies now require the current orbit tangent slash angle; explicit `directionalSlashAngleDeg` remains a fixed data override.
+- Directional guide lines redraw while the enemy moves so the visible guide and hit rule stay aligned.
+- Wrong-direction directional contact emits one short grey/cyan reject burst per enemy per stroke. It still deals no damage and gives no score.
+- Solar Lance line hits now have regression coverage for directional success/reject because they use `resolveLineHits`.
+
+Files changed:
+- `src/render/DestructionBurst.ts`
+- `src/render/DestructionBurst.test.ts`
+- `src/render/HitBurst.ts`
+- `src/render/HitBurst.test.ts`
+- `src/game/HitFeedback.ts`
+- `src/game/HitFeedback.test.ts`
+- `src/game/DirectionalCut.ts`
+- `src/game/DirectionalCut.test.ts`
+- `src/game/CollisionSystem.ts`
+- `src/game/CollisionSystem.test.ts`
+- `src/game/Enemy.ts`
+- `src/game/Enemy.test.ts`
+- `src/game/GameScene.ts`
+
+Verification:
+- Targeted tests passed: 6 files / 55 tests.
+- Regression: `npm test` passed, 17 files / 126 tests.
+- Build: `npm run build` passed.
+- Local Chrome mobile smoke at `http://127.0.0.1:5173/?qaGauge=100&seed=1234`: one canvas fills `412x915`, no page errors or console errors.
+
+Remaining risks:
+- Wrong-direction contact still counts as a failed slash if no enemy is killed in the stroke. This is intentional for now, but needs phone feel QA.
+- Fast comet frequency may still make directional enemies feel too common because spawning is not yet weighted.
+
+Next steps:
+1. Real-phone QA for Last Save visibility, destruction noise level, directional guide readability, and wrong-direction reject feel.
+2. If directional enemies feel too common, add spawn weighting or introduce a dedicated low-frequency directional enemy.
+3. Then start the next gameplay feature: additional skills or spawn/wave difficulty shaping, depending on which QA pain is stronger.
+
+---
+
+## 2026-06-28 19:25 KST — QA and Implementation Backlog Saved
+
+User request:
+- Save all deferred QA items as todos, and include the following implementation work beyond only the immediate next step.
+
+Decision:
+- Created the canonical review/readiness backlog at `ai/reviews/review.md`.
+- Split it into:
+  - P0/P1 real-device QA backlog.
+  - Directional cut, Last Save, Solar Lance, VFX, combo, heavy re-entry, HUD overlap, and impact-feel checks.
+  - Ordered implementation backlog after QA: directional enemy frequency tuning, wave/difficulty shaping, DEV-only QA harness, skill expansion, asset replacement, backend/ranking readiness, platform release readiness.
+
+Verification:
+- Documentation-only change. No tests needed.
+
+Next steps:
+1. Continue implementation from `ai/reviews/review.md`, starting with directional enemy frequency tuning unless Owner chooses a different item.

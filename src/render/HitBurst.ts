@@ -11,15 +11,21 @@ interface Burst {
   isLastSave: boolean;
 }
 
+export interface HitBurstOptions {
+  labelScale?: number;
+  ringWidth?: number;
+  lifeMs?: number;
+}
+
 const LIFE_MS = 620;
 
-function textStyle(color: number): TextStyle {
+function textStyle(color: number, scale = 1): TextStyle {
   return new TextStyle({
     fontFamily: "Arial, sans-serif",
-    fontSize: 32,
+    fontSize: Math.round(32 * scale),
     fontWeight: "bold",
     fill: color,
-    stroke: { color: 0x05060f, width: 5 },
+    stroke: { color: 0x05060f, width: Math.max(4, Math.round(5 * scale)) },
     align: "center",
   });
 }
@@ -33,21 +39,22 @@ export class HitBurst {
     this.container.zIndex = LAYER.EXPLOSION;
   }
 
-  spawn(x: number, y: number, label: string, color: number, radius: number, isLastSave = false): void {
+  spawn(x: number, y: number, label: string, color: number, radius: number, isLastSave = false, options: HitBurstOptions = {}): void {
     const root = new Container();
     root.position.set(x, y);
 
     const ring = new Graphics();
-    ring.circle(0, 0, radius).stroke({ width: isLastSave ? 5 : 3, color, alpha: 0.95 });
-    ring.circle(0, 0, radius * 0.55).stroke({ width: 2, color: 0xffffff, alpha: isLastSave ? 0.7 : 0.35 });
+    const ringWidth = options.ringWidth ?? (isLastSave ? 5 : 3);
+    ring.circle(0, 0, radius).stroke({ width: ringWidth, color, alpha: 0.95 });
+    ring.circle(0, 0, radius * 0.55).stroke({ width: Math.max(2, ringWidth * 0.45), color: 0xffffff, alpha: isLastSave ? 0.7 : 0.35 });
 
-    const text = new Text({ text: label, style: textStyle(color) });
+    const text = new Text({ text: label, style: textStyle(color, options.labelScale ?? 1) });
     text.anchor.set(0.5);
     text.position.set(0, -radius - 24);
 
     root.addChild(ring, text);
     this.container.addChild(root);
-    this.bursts.push({ root, ring, text, age: 0, lifeMs: LIFE_MS, radius, isLastSave });
+    this.bursts.push({ root, ring, text, age: 0, lifeMs: options.lifeMs ?? LIFE_MS, radius, isLastSave });
   }
 
   clear(): void {

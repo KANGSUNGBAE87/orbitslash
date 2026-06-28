@@ -45,6 +45,14 @@ export interface OrbitProfile {
   dir: number; // 회전방향 +1(시계) / -1(반시계)
 }
 
+export interface WaveBand {
+  fromMs: number;
+  spawnIntervalMs?: number;
+  weights: Record<string, number>;
+  maxConsecutive?: Record<string, number>;
+}
+export type WaveTable = Record<string, WaveBand[]>;
+
 export interface EnemyState {
   id: number;
   type: string;
@@ -54,6 +62,9 @@ export interface EnemyState {
   approachSpeed: number;
   radiusPx: number;
   earthImpactRadiusPx: number;
+  directional: boolean;
+  directionalSlashAngleRad?: number;
+  directionalToleranceDeg?: number;
   hp: number;
   damage: number;
   score: number;
@@ -72,6 +83,8 @@ export interface EnemyDef {
   damage: number;
   score: number;
   directional: boolean;
+  directionalSlashAngleDeg?: number;
+  directionalToleranceDeg?: number;
 }
 export type EnemyTable = Record<string, EnemyDef>;
 
@@ -84,6 +97,7 @@ export interface ScoringConfig {
   accuracyMultiplier: Record<"normal" | "directional" | "weakCenter" | "bossWeak", number>;
   comboMultiplier: ComboTier[];
   comboGainPerSlashCap: number | null;
+  comboChainTimeoutMs?: number;
   multiCutBonus: { double: number; triple: number; mega: number; orbital_master: number };
   gaugeGain: Record<string, number>;
 }
@@ -110,6 +124,10 @@ export interface SkillDef {
   straightnessMin?: number;
   lineToEarthMaxR?: number;
   endpointOutsideR?: number;
+  durationMs?: number;
+  slowMultiplier?: number;
+  circleTurnMinRad?: number;
+  closeMaxRatio?: number;
   _phase?: string;
 }
 export interface SkillTable {
@@ -117,6 +135,7 @@ export interface SkillTable {
   orbital_cut: SkillDef;
   gravity_slow: SkillDef;
   delta_shield: SkillDef;
+  reserve_slot: SkillDef;
   _debug: { instantFillGauge: boolean; infiniteGauge: boolean };
 }
 

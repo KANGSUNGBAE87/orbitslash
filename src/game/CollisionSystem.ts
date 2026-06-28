@@ -2,11 +2,13 @@ import type {
   Point,
   Segment,
   EnemyState,
+  DistanceBand,
   HitResult,
   MultiCutTier,
   ZoneTable,
 } from "./types";
 import { distanceBand } from "./coords";
+import { directionalSlashAccuracy } from "./DirectionalCut";
 
 // 충돌 판정 (product-plan §6.2). 핵심 함수는 순수 — PixiJS import 금지.
 // distanceBand는 coords.ts에서 re-export 하여 단일 출처 유지.
@@ -70,6 +72,11 @@ export interface LiveSegmentHitOptions extends HitRadiusOptions {
   canHitEnemy?: (enemy: EnemyState, hitRadiusPx: number) => boolean;
 }
 
+export interface DirectionalRejectResult {
+  enemyId: number;
+  band: DistanceBand;
+}
+
 function hitRadiusForEnemy(enemy: EnemyState, options: HitRadiusOptions): number {
   const inflate = options.hitRadiusInflatePx ?? 0;
   const scale = options.hitRadiusScaleForEnemy?.(enemy) ?? 1;
@@ -112,10 +119,12 @@ export function resolveLineHits(
     if (!enemy.alive) continue;
     const pos = enemyPosition(enemy, earthCx, earthCy);
     if (segmentIntersectsCircle(line, pos.x, pos.y, hitRadiusForEnemy(enemy, options))) {
+      const accuracy = directionalSlashAccuracy(line, enemy);
+      if (accuracy == null) continue;
       hits.push({
         enemyId: enemy.id,
         band: distanceBand(enemy.radius, earthR, zones),
-        accuracy: "normal",
+        accuracy,
       });
     }
   }
@@ -141,14 +150,44 @@ export function resolveLiveSegmentHits(
     const hitRadiusPx = hitRadiusForEnemy(enemy, options);
     if (options.canHitEnemy && !options.canHitEnemy(enemy, hitRadiusPx)) continue;
     if (segmentIntersectsCircle(segment, pos.x, pos.y, hitRadiusPx)) {
+      const accuracy = directionalSlashAccuracy(segment, enemy);
+      if (accuracy == null) continue;
       hits.push({
         enemyId: enemy.id,
         band: distanceBand(enemy.radius, earthR, zones),
-        accuracy: "normal",
+        accuracy,
       });
     }
   }
   return hits;
+}
+
+export function resolveLiveSegmentDirectionalRejects(
+  segment: Segment,
+  enemies: EnemyState[],
+  earthCx: number,
+  earthCy: number,
+  earthR: number,
+  zones: ZoneTable,
+  options: LiveSegmentHitOptions,
+): DirectionalRejectResult[] {
+  if (segmentLength(segment) < options.minSegmentLengthPx) return [];
+
+  const rejects: DirectionalRejectResult[] = [];
+  for (const enemy of enemies) {
+    if (!enemy.alive || !enemy.directional) continue;
+    if (options.alreadyHitEnemyIds?.has(enemy.id)) continue;
+    const pos = enemyPosition(enemy, earthCx, earthCy);
+    const hitRadiusPx = hitRadiusForEnemy(enemy, options);
+    if (options.canHitEnemy && !options.canHitEnemy(enemy, hitRadiusPx)) continue;
+    if (!segmentIntersectsCircle(segment, pos.x, pos.y, hitRadiusPx)) continue;
+    if (directionalSlashAccuracy(segment, enemy) != null) continue;
+    rejects.push({
+      enemyId: enemy.id,
+      band: distanceBand(enemy.radius, earthR, zones),
+    });
+  }
+  return rejects;
 }
 
 /**

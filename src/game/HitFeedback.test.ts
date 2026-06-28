@@ -13,11 +13,20 @@ describe("feedbackForHitBand", () => {
     });
   });
 
+  it("makes closer distance bands visually louder", () => {
+    const outer = feedbackForHitBand("outer", cfg);
+    const danger = feedbackForHitBand("danger", cfg);
+
+    expect(danger.particleCount).toBeGreaterThan(outer.particleCount);
+    expect(danger.labelScale).toBeGreaterThan(outer.labelScale);
+  });
+
   it("marks Last Save as a stronger feedback event", () => {
     expect(feedbackForHitBand("lastSave", cfg)).toMatchObject({
       multiplier: 3.5,
       isLastSave: true,
     });
+    expect(feedbackForHitBand("lastSave", cfg).particleCount).toBeGreaterThan(feedbackForHitBand("danger", cfg).particleCount);
   });
 
   it("falls back to x1.0 for impact or unknown multiplier bands", () => {

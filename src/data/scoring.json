@@ -9,11 +9,13 @@
     { "min": 30, "mult": 2.5 }
   ],
   "comboGainPerSlashCap": null,
+  "comboChainTimeoutMs": 650,
   "multiCutBonus": { "double": 50, "triple": 120, "mega": 400, "orbital_master": 1000 },
   "gaugeGain": {
     "small_meteor": 1,
     "basic_meteor": 1,
     "fast_comet": 1,
+    "directional_comet": 1,
     "heavy_asteroid": 2,
     "comboKill": 2,
     "lastSave": 8,

@@ -11,6 +11,7 @@ const enemy = (overrides: Partial<EnemyState> = {}): EnemyState => ({
   approachSpeed: 0,
   radiusPx: 58,
   earthImpactRadiusPx: 13,
+  directional: false,
   hp: 3,
   damage: 12,
   score: 180,

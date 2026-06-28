@@ -12,6 +12,36 @@ export interface RunSubmission {
   maxCombo: number;
   lastSaveCount: number;
   remainingEnergy: number;
+  solarLanceCount?: number;
+  gravitySlowCount?: number;
+}
+
+export interface RunSummary extends RunSubmission {
+  skillUse: {
+    solar_lance: number;
+    gravity_slow: number;
+  };
+}
+
+export type SubmissionValidation =
+  | { ok: true }
+  | { ok: false; reason: "score_negative" | "survival_negative" | "energy_out_of_range" };
+
+export function createRunSummary(run: RunSubmission): RunSummary {
+  return {
+    ...run,
+    skillUse: {
+      solar_lance: run.solarLanceCount ?? 0,
+      gravity_slow: run.gravitySlowCount ?? 0,
+    },
+  };
+}
+
+export function validateRunSubmission(run: Pick<RunSubmission, "score" | "survivalMs" | "remainingEnergy">): SubmissionValidation {
+  if (run.score < 0) return { ok: false, reason: "score_negative" };
+  if (run.survivalMs < 0) return { ok: false, reason: "survival_negative" };
+  if (run.remainingEnergy < 0 || run.remainingEnergy > 100) return { ok: false, reason: "energy_out_of_range" };
+  return { ok: true };
 }
 
 export interface IRankingSystem {

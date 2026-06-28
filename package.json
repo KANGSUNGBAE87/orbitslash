@@ -3,14 +3,15 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Orbit Slash — Endless Orbital Slash Defense (Apps in Toss WebView mini-game)",
+  "description": "Orbit Slash — Endless Orbital Slash Defense (Google Play-first ready, Apps in Toss-compatible WebView game)",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "preflight:release-boundary": "node scripts/check-release-boundary.mjs"
   },
   "dependencies": {
     "pixi.js": "^8.6.6"

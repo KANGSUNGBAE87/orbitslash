@@ -30,6 +30,7 @@ export interface ScoringSnapshot {
   maxCombo: number;
   combo: number;
   lastSaveCount: number;
+  kills: number;
 }
 
 /** 콤보 값 → 배율 (product-plan §13.3). 가장 높은 충족 tier의 mult. */
@@ -72,19 +73,32 @@ export class ScoringSystem {
   private combo = 0;
   private maxCombo = 0;
   private lastSaveCount = 0;
+  private kills = 0;
+  private lastComboHitAtMs: number | null = null;
 
   constructor(cfg: ScoringConfig) {
     this.cfg = cfg;
   }
 
-  onHit(hits: HitResult[], baseScoreOf: BaseScoreFn, enemyTypeOf: EnemyTypeFn): OnHitResult {
+  onHit(hits: HitResult[], baseScoreOf: BaseScoreFn, enemyTypeOf: EnemyTypeFn, hitAtMs?: number): OnHitResult {
     if (hits.length === 0) {
       return { gained: 0, combo: this.combo, multiCut: 0, gauge: 0, lastSave: false };
+    }
+
+    const timeoutMs = this.cfg.comboChainTimeoutMs;
+    if (
+      timeoutMs != null &&
+      hitAtMs != null &&
+      this.lastComboHitAtMs != null &&
+      hitAtMs - this.lastComboHitAtMs >= timeoutMs
+    ) {
+      this.combo = 0;
     }
 
     // 콤보 증가량: 처치 마릿수, cap 적용
     const cap = this.cfg.comboGainPerSlashCap;
     const comboGain = cap == null ? hits.length : Math.min(hits.length, cap);
+    this.kills += hits.length;
     this.combo += comboGain;
     if (this.combo > this.maxCombo) this.maxCombo = this.combo;
 
@@ -98,6 +112,9 @@ export class ScoringSystem {
       // 게이지: 적 타입별 gaugeGain
       const type = enemyTypeOf(h.enemyId);
       gauge += this.cfg.gaugeGain[type] ?? 0;
+      if (h.accuracy === "directional") {
+        gauge += this.cfg.gaugeGain.directionalCut ?? 0;
+      }
       if (h.band === "lastSave") {
         lastSave = true;
         this.lastSaveCount += 1;
@@ -116,11 +133,13 @@ export class ScoringSystem {
     gained += multiCut;
 
     this.score += gained;
+    if (hitAtMs != null) this.lastComboHitAtMs = hitAtMs;
     return { gained, combo: this.combo, multiCut, gauge, lastSave };
   }
 
   onMiss(): void {
     this.combo = 0;
+    this.lastComboHitAtMs = null;
   }
 
   reset(): void {
@@ -128,6 +147,8 @@ export class ScoringSystem {
     this.combo = 0;
     this.maxCombo = 0;
     this.lastSaveCount = 0;
+    this.kills = 0;
+    this.lastComboHitAtMs = null;
   }
 
   snapshot(): ScoringSnapshot {
@@ -136,6 +157,7 @@ export class ScoringSystem {
       maxCombo: this.maxCombo,
       combo: this.combo,
       lastSaveCount: this.lastSaveCount,
+      kills: this.kills,
     };
   }
 }

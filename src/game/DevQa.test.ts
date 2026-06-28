@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readDevNumberParam } from "./DevQa";
+import { readDevNumberParam, readDevStringParam } from "./DevQa";
 
 describe("readDevNumberParam", () => {
   it("returns undefined when the query param is missing", () => {
@@ -18,5 +18,12 @@ describe("readDevNumberParam", () => {
 
   it("can force integers for deterministic seeds", () => {
     expect(readDevNumberParam("?seed=42.9", "seed", { min: 0, max: 1000, integer: true })).toBe(42);
+  });
+});
+
+describe("readDevStringParam", () => {
+  it("returns only allowed string values", () => {
+    expect(readDevStringParam("?qaPreset=lastSave", "qaPreset", ["lastSave", "directional"] as const)).toBe("lastSave");
+    expect(readDevStringParam("?qaPreset=unknown", "qaPreset", ["lastSave", "directional"] as const)).toBeUndefined();
   });
 });

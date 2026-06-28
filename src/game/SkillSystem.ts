@@ -15,11 +15,19 @@ export interface SkillContext {
   screenShortSide: number;
 }
 
-export interface SkillActivation {
+export interface SolarLanceActivation {
   skillId: "solar_lance";
   judgedHits: HitResult[]; // pointer-up 시점 확정 대상 (이후 연출은 시각 전용)
   vfxLine: Segment; // 연출용 — 판정에 영향 없음
 }
+
+export interface GravitySlowActivation {
+  skillId: "gravity_slow";
+  durationMs: number;
+  slowMultiplier: number;
+}
+
+export type SkillActivation = SolarLanceActivation | GravitySlowActivation;
 
 export class SkillSystem {
   private cooldowns: Record<string, number> = {};
@@ -42,7 +50,7 @@ export class SkillSystem {
    * 판정 통과 시 vfxLine만 채워 반환 (judgedHits 매칭은 Subagent B가 적 목록과 함께).
    * 게이지/쿨타임 미충족이면 null.
    */
-  trySolarLance(g: GestureResult, ctx: SkillContext): SkillActivation | null {
+  trySolarLance(g: GestureResult, ctx: SkillContext): SolarLanceActivation | null {
     const def = this.skills.solar_lance;
     if (g.points.length < 2) return null;
     if (!this.isReady("solar_lance")) return null;
@@ -77,6 +85,23 @@ export class SkillSystem {
       skillId: "solar_lance",
       judgedHits: [], // GameScene: pointer-up 스냅샷으로 적 목록과 직선 교차해 채움
       vfxLine: { a: first, b: last },
+    };
+  }
+
+  tryGravitySlow(g: GestureResult, ctx: SkillContext): GravitySlowActivation | null {
+    const def = this.skills.gravity_slow;
+    if (g.points.length < 3) return null;
+    if (!this.isReady("gravity_slow")) return null;
+    if (ctx.gauge < def.gaugeCost && !this.skills._debug.infiniteGauge) return null;
+    if (!g.enclosesEarth) return null;
+    if (g.totalTurnRad < (def.circleTurnMinRad ?? 4.8)) return null;
+    if (g.startEndGapRatio > (def.closeMaxRatio ?? 0.35)) return null;
+
+    this.cooldowns.gravity_slow = (def.cooldownSec ?? 24) * 1000;
+    return {
+      skillId: "gravity_slow",
+      durationMs: def.durationMs ?? 2600,
+      slowMultiplier: def.slowMultiplier ?? 0.45,
     };
   }
 

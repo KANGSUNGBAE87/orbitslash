@@ -36,4 +36,21 @@ describe("createEnemyState", () => {
 
     expect(enemy.earthImpactRadiusPx).toBe(20);
   });
+
+  it("directional enemy는 기본적으로 현재 공전 접선 방향을 사용한다", () => {
+    const enemy = createEnemyState(
+      { ...spec, startAngleRad: Math.PI / 4 },
+      { ...def, directional: true, directionalToleranceDeg: 24 },
+    );
+
+    expect(enemy.directional).toBe(true);
+    expect(enemy.directionalSlashAngleRad).toBeUndefined();
+    expect(enemy.directionalToleranceDeg).toBe(24);
+  });
+
+  it("directional angle이 데이터에 있으면 고정 절단 방향으로 사용한다", () => {
+    const enemy = createEnemyState(spec, { ...def, directional: true, directionalSlashAngleDeg: 45 });
+
+    expect(enemy.directionalSlashAngleRad).toBeCloseTo(Math.PI / 4, 6);
+  });
 });

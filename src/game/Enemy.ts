@@ -19,11 +19,18 @@ export function createEnemyState(spec: SpawnSpec, def: EnemyDef): EnemyState {
     approachSpeed: spec.approachSpeed,
     radiusPx: def.radiusPx,
     earthImpactRadiusPx: def.earthImpactRadiusPx ?? EARTH_ENEMY_IMPACT_RADIUS_PX,
+    directional: def.directional,
+    directionalSlashAngleRad: def.directional && def.directionalSlashAngleDeg != null ? directionalSlashAngleRad(def.directionalSlashAngleDeg) : undefined,
+    directionalToleranceDeg: def.directional ? (def.directionalToleranceDeg ?? 30) : undefined,
     hp: def.hp,
     damage: def.damage,
     score: def.score,
     alive: true,
   };
+}
+
+function directionalSlashAngleRad(angleDeg: number): number {
+  return (angleDeg * Math.PI) / 180;
 }
 
 /**

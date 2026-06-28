@@ -103,6 +103,13 @@ describe("ScoringSystem.onHit (콤보 += N, Multi Cut, 게이지, Last Save)", (
     expect(out.gauge).toBe(2 + 2);
   });
 
+  it("directional accuracy면 directionalCut 게이지를 추가한다", () => {
+    const s = new ScoringSystem(cfg);
+    const out = s.onHit([{ ...hit("outer", 1), accuracy: "directional" }], () => 100, () => "fast_comet");
+
+    expect(out.gauge).toBe(1 + 3);
+  });
+
   it("Last Save 밴드면 lastSave 플래그 true + 게이지 +8", () => {
     const s = new ScoringSystem(cfg);
     const out = s.onHit([hit("lastSave", 1)], () => 100, () => "basic_meteor");
@@ -132,6 +139,21 @@ describe("ScoringSystem.onHit (콤보 += N, Multi Cut, 게이지, Last Save)", (
     expect(out.combo).toBe(2);
   });
 
+  it("comboChainTimeoutMs 안의 다음 처치는 같은 콤보로 이어진다", () => {
+    const s = new ScoringSystem(cfg);
+
+    expect(s.onHit([hit("outer", 1)], () => 100, () => "basic_meteor", 0).combo).toBe(1);
+    expect(s.onHit([hit("outer", 2)], () => 100, () => "basic_meteor", 649).combo).toBe(2);
+  });
+
+  it("comboChainTimeoutMs 이상 처치 공백이 생기면 같은 stroke라도 새 콤보로 시작한다", () => {
+    const s = new ScoringSystem(cfg);
+
+    expect(s.onHit([hit("outer", 1)], () => 100, () => "basic_meteor", 0).combo).toBe(1);
+    expect(s.onHit([hit("outer", 2)], () => 100, () => "basic_meteor", 650).combo).toBe(1);
+    expect(s.snapshot().maxCombo).toBe(1);
+  });
+
   it("onMiss → 콤보 0으로 리셋", () => {
     const s = new ScoringSystem(cfg);
     s.onHit([hit("outer", 1), hit("outer", 2)], () => 100, () => "basic_meteor");
@@ -146,6 +168,7 @@ describe("ScoringSystem.onHit (콤보 += N, Multi Cut, 게이지, Last Save)", (
     const snap = s.snapshot();
     expect(snap.maxCombo).toBe(4);
     expect(snap.lastSaveCount).toBe(1);
+    expect(snap.kills).toBe(4);
     expect(snap.score).toBeGreaterThan(0);
   });
 

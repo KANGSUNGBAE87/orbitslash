@@ -18,6 +18,7 @@ const heavy = (): EnemyState => ({
   approachSpeed: 0,
   radiusPx: 128,
   earthImpactRadiusPx: 13,
+  directional: false,
   hp: 3,
   damage: 12,
   score: 180,

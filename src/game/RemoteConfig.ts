@@ -3,12 +3,14 @@ import scoringJson from "../data/scoring.json";
 import difficultyJson from "../data/difficulty.json";
 import skillsJson from "../data/skills.json";
 import orbitsJson from "../data/orbits.json";
+import wavesJson from "../data/waves.json";
 import type {
   EnemyTable,
   ScoringConfig,
   DifficultyTable,
   SkillTable,
   OrbitProfile,
+  WaveTable,
 } from "./types";
 
 // Remote Config (implementation-plan §3.6). 모든 시스템의 데이터 진입 단일 통로.
@@ -22,6 +24,7 @@ export interface IRemoteConfig {
   getDifficulty(): DifficultyTable;
   getSkills(): SkillTable;
   getOrbits(): OrbitProfile[];
+  getWaves(): WaveTable;
   ready(): Promise<void>;
 }
 
@@ -31,6 +34,7 @@ const tables: Record<string, unknown> = {
   difficulty: difficultyJson,
   skills: skillsJson,
   orbits: orbitsJson,
+  waves: wavesJson,
 };
 
 class LocalRemoteConfig implements IRemoteConfig {
@@ -51,6 +55,9 @@ class LocalRemoteConfig implements IRemoteConfig {
   }
   getOrbits(): OrbitProfile[] {
     return (orbitsJson as unknown as { profiles: OrbitProfile[] }).profiles;
+  }
+  getWaves(): WaveTable {
+    return wavesJson as unknown as WaveTable;
   }
   ready(): Promise<void> {
     // 원격 도입 전: 즉시 resolve.
