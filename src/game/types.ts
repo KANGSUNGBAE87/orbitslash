@@ -53,6 +53,7 @@ export interface EnemyState {
   angularSpeed: number;
   approachSpeed: number;
   radiusPx: number;
+  earthImpactRadiusPx: number;
   hp: number;
   damage: number;
   score: number;
@@ -66,6 +67,7 @@ export interface EnemyDef {
   approachSpeed: number;
   angularSpeed: number;
   radiusPx: number;
+  earthImpactRadiusPx?: number;
   hp: number;
   damage: number;
   score: number;

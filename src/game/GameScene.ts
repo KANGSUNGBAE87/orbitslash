@@ -1,5 +1,5 @@
 import { Container, Graphics, Rectangle, type FederatedPointerEvent } from "pixi.js";
-import { BASE_WIDTH, BASE_HEIGHT, EARTH_BODY_RADIUS, EARTH_GAMEPLAY_RADIUS } from "./coords";
+import { BASE_WIDTH, BASE_HEIGHT, EARTH_BODY_RADIUS, EARTH_GAMEPLAY_RADIUS, distance } from "./coords";
 import { LAYER } from "./layers";
 import { Earth } from "./Earth";
 import { RemoteConfig } from "./RemoteConfig";
@@ -15,11 +15,18 @@ import { SkillSystem } from "./SkillSystem";
 import { stepEnemy, enemyXY } from "./Enemy";
 import { readDevNumberParam } from "./DevQa";
 import { feedbackForHitBand } from "./HitFeedback";
-import { pathLength, straightness, trimPathToMaxLength } from "./gesture-helpers";
+import { pathLength, trimPathToMaxLength } from "./gesture-helpers";
+import { StrokeHitTracker } from "./StrokeHitTracker";
+import { enemyHitShakeOffset } from "./HitShake";
+import { shouldReserveLiveSlashForSolarLance } from "./SolarLanceReserve";
 import {
+  ENEMY_HIT_SHAKE_DURATION_MS,
+  ENEMY_HIT_SHAKE_INTENSITY_PX,
   LIVE_SEGMENT_MIN_LENGTH_PX,
   MISS_COMMIT_DISTANCE_PX,
   NORMAL_SLASH_HIT_INFLATE_PX,
+  SAME_STROKE_REHIT_COOLDOWN_MS,
+  SAME_STROKE_REHIT_EXIT_MARGIN_PX,
   SOLAR_LANCE_HIT_INFLATE_PX,
   STROKE_TRAIL_MAX_LENGTH_PX,
 } from "./input-tuning";
@@ -46,6 +53,12 @@ interface PendingKill {
   type: string;
   x: number;
   y: number;
+}
+
+interface EnemyHitFeedbackState {
+  elapsedMs: number;
+  durationMs: number;
+  intensityPx: number;
 }
 
 // 적 깊이감: 멀리 0.6 → 가까이 1.3 (design §11.2)
@@ -100,9 +113,14 @@ export class GameScene {
   private elapsedMs = 0;
   private gauge = 0;
   private livePoints: Point[] = [];
-  private strokeHitEnemyIds = new Set<number>();
+  private strokeHitTracker = new StrokeHitTracker({
+    exitMarginPx: SAME_STROKE_REHIT_EXIT_MARGIN_PX,
+    rehitCooldownMs: SAME_STROKE_REHIT_COOLDOWN_MS,
+  });
+  private strokeHadHit = false;
   private strokeKills: PendingKill[] = [];
   private strokeMoved = false;
+  private enemyHitFeedback = new Map<number, EnemyHitFeedbackState>();
 
   constructor() {
     this.stage = new Container();
@@ -188,6 +206,7 @@ export class GameScene {
     this.gauge = gaugeOverride ?? (this.skillTable._debug.instantFillGauge ? GAUGE_MAX : 0);
     this.elapsedMs = 0;
     this.running = true;
+    this.enemyHitFeedback.clear();
     this.earth.setVisualState("healthy");
     this.resetStrokeState();
   }
@@ -256,7 +275,7 @@ export class GameScene {
   private resolveInput(points: Point[], earth: EarthRef): void {
     const committedMovement = pathLength(points) >= MISS_COMMIT_DISTANCE_PX;
     const act =
-      this.strokeHitEnemyIds.size === 0
+      !this.strokeHadHit
         ? this.skills.trySolarLance(
             this.gestureResultFromPoints(points, earth),
             { earth, gauge: this.gauge, screenShortSide: BASE_WIDTH },
@@ -271,8 +290,10 @@ export class GameScene {
       const lanceKills = this.applyHits(
         resolveLineHits(act.vfxLine, this.objects.getAlive(), earth.cx, earth.cy, earth.r, this.zones, {
           hitRadiusInflatePx: SOLAR_LANCE_HIT_INFLATE_PX,
+          hitRadiusScaleForEnemy: (enemy) => this.enemyVisualScale(enemy),
         }),
         this.skillTable.solar_lance.hitDamage ?? NORMAL_SLASH_DAMAGE,
+        points[points.length - 1]?.t ?? performance.now(),
       );
       this.commitKills(lanceKills, earth, false);
       this.objects.prune();
@@ -281,14 +302,15 @@ export class GameScene {
 
     if (this.strokeKills.length > 0) {
       this.commitKills(this.strokeKills, earth, true);
-    } else if (committedMovement && this.strokeHitEnemyIds.size === 0) {
+    } else if (committedMovement && !this.strokeHadHit) {
       this.scoring.onMiss(); // 탭/짧은 입력은 neutral, 의미 있는 빈 슬래시만 콤보 끊김.
     }
     this.objects.prune();
   }
 
   private resetStrokeState(): void {
-    this.strokeHitEnemyIds.clear();
+    this.strokeHitTracker.reset();
+    this.strokeHadHit = false;
     this.strokeKills = [];
     this.strokeMoved = false;
   }
@@ -297,23 +319,44 @@ export class GameScene {
     const hits = resolveLiveSegmentHits(segment, this.objects.getAlive(), earth.cx, earth.cy, earth.r, this.zones, {
       minSegmentLengthPx: LIVE_SEGMENT_MIN_LENGTH_PX,
       hitRadiusInflatePx: NORMAL_SLASH_HIT_INFLATE_PX,
-      alreadyHitEnemyIds: this.strokeHitEnemyIds,
+      hitRadiusScaleForEnemy: (enemy) => this.enemyVisualScale(enemy),
+      canHitEnemy: (enemy) => this.strokeHitTracker.canHit(enemy.id, segment.b.t),
     });
-    if (hits.length === 0) return;
+    if (hits.length === 0) {
+      this.updateStrokeHitRearm(segment);
+      return;
+    }
 
-    const kills = this.applyHits(hits, NORMAL_SLASH_DAMAGE);
+    const kills = this.applyHits(hits, NORMAL_SLASH_DAMAGE, segment.b.t);
     for (const kill of kills) {
       this.strokeKills.push(kill);
       this.spawnKillFeedback(kill);
     }
+    this.updateStrokeHitRearm(segment);
     this.objects.prune();
   }
 
-  private applyHits(hits: HitResult[], damage: number): PendingKill[] {
+  private updateStrokeHitRearm(segment: Segment): void {
+    for (const enemy of this.objects.getAlive()) {
+      const pos = enemyXY(enemy);
+      const hitRadiusPx = enemy.radiusPx * this.enemyVisualScale(enemy) + NORMAL_SLASH_HIT_INFLATE_PX;
+      const outside = distance(segment.b.x, segment.b.y, pos.x, pos.y) > hitRadiusPx + SAME_STROKE_REHIT_EXIT_MARGIN_PX;
+      this.strokeHitTracker.markExited(enemy.id, outside);
+    }
+  }
+
+  private enemyVisualScale(enemy: EnemyState): number {
+    const diff = this.difficulty[DIFFICULTY] as unknown as { gravitySwell: number };
+    return depthScale(enemy.radius, EARTH_GAMEPLAY_RADIUS, diff.gravitySwell);
+  }
+
+  private applyHits(hits: HitResult[], damage: number, hitAtMs = performance.now()): PendingKill[] {
     const killed: PendingKill[] = [];
     for (const h of hits) {
-      this.strokeHitEnemyIds.add(h.enemyId);
+      this.strokeHadHit = true;
+      this.strokeHitTracker.recordHit(h.enemyId, hitAtMs);
       const result = this.objects.applyDamage(h.enemyId, damage);
+      if (result.enemy) this.triggerEnemyHitFeedback(h.enemyId);
       if (!result.killed || !result.enemy) continue;
 
       const pos = enemyXY(result.enemy);
@@ -359,16 +402,30 @@ export class GameScene {
     this.hitBurst.spawn(kill.x, kill.y, multiplierLabel(feedback.multiplier), feedback.color, feedback.radius, feedback.isLastSave);
   }
 
-  private shouldReserveStrokeForSolarLance(points: Point[], earth: EarthRef): boolean {
-    if (!this.skills.isReady("solar_lance")) return false;
-    if (this.gauge < this.skillTable.solar_lance.gaugeCost && !this.skillTable._debug.infiniteGauge) return false;
-    if (points.length < 2 || pathLength(points) < BASE_WIDTH * 0.18) return false;
-    if (straightness(points) < 0.9) return false;
+  private triggerEnemyHitFeedback(enemyId: number): void {
+    this.enemyHitFeedback.set(enemyId, {
+      elapsedMs: 0,
+      durationMs: ENEMY_HIT_SHAKE_DURATION_MS,
+      intensityPx: ENEMY_HIT_SHAKE_INTENSITY_PX,
+    });
+  }
 
-    const first = points[0]!;
-    const last = points[points.length - 1]!;
-    const lineDist = pointToSegmentDistance(earth.cx, earth.cy, first.x, first.y, last.x, last.y);
-    return lineDist <= earth.r * 0.9;
+  private updateEnemyHitFeedback(dtMs: number): void {
+    for (const [id, state] of this.enemyHitFeedback) {
+      state.elapsedMs += dtMs;
+      if (state.elapsedMs >= state.durationMs) this.enemyHitFeedback.delete(id);
+    }
+  }
+
+  private shouldReserveStrokeForSolarLance(points: Point[], earth: EarthRef): boolean {
+    return shouldReserveLiveSlashForSolarLance(points, earth, {
+      strokeHadHit: this.strokeHadHit,
+      skillReady: this.skills.isReady("solar_lance"),
+      gauge: this.gauge,
+      gaugeCost: this.skillTable.solar_lance.gaugeCost,
+      infiniteGauge: this.skillTable._debug.infiniteGauge,
+      screenShortSide: BASE_WIDTH,
+    });
   }
 
   /** GestureSystem 없이 점 배열만으로 분류 결과 생성 (Solar Lance 판정용). */
@@ -422,7 +479,7 @@ export class GameScene {
       const diff = this.difficulty[DIFFICULTY] as unknown as { gravitySwell: number };
       for (const en of this.objects.getAlive()) {
         stepEnemy(en, dtMs);
-        if (enemyTouchesImpactZone(en.radius, en.radiusPx, EARTH_GAMEPLAY_RADIUS, this.zones, diff.gravitySwell)) {
+        if (enemyTouchesImpactZone(en.radius, en.radiusPx, EARTH_GAMEPLAY_RADIUS, this.zones, diff.gravitySwell, en.earthImpactRadiusPx)) {
           const r = this.energy.applyDamage(en.damage);
           this.scoring.onMiss(); // 지구 피격 = 콤보 끊김
           this.objects.kill(en.id);
@@ -436,9 +493,9 @@ export class GameScene {
         }
       }
       this.objects.prune();
+      this.updateEnemyHitFeedback(dtMs);
 
       // render 적 스프라이트
-      const diff2 = this.difficulty[DIFFICULTY] as unknown as { gravitySwell: number };
       for (const en of this.objects.getAlive()) {
         let g = this.sprites.get(en.id);
         if (!g) {
@@ -448,9 +505,15 @@ export class GameScene {
           this.sprites.set(en.id, g);
         }
         const pos = enemyXY(en);
-        g.position.set(pos.x, pos.y);
-        g.scale.set(depthScale(en.radius, EARTH_GAMEPLAY_RADIUS, diff2.gravitySwell));
+        const hitFeedback = this.enemyHitFeedback.get(en.id);
+        const shake = hitFeedback
+          ? enemyHitShakeOffset(en.id, hitFeedback.elapsedMs, hitFeedback.intensityPx, hitFeedback.durationMs)
+          : { x: 0, y: 0, scale: 1 };
+        g.position.set(pos.x + shake.x, pos.y + shake.y);
+        g.scale.set(this.enemyVisualScale(en) * shake.scale);
       }
+    } else {
+      this.updateEnemyHitFeedback(dtMs);
     }
 
     // 시각 갱신 (running 무관)
@@ -499,21 +562,4 @@ export class GameScene {
       };
     });
   }
-}
-
-function pointToSegmentDistance(
-  px: number,
-  py: number,
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number,
-): number {
-  const dx = bx - ax;
-  const dy = by - ay;
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq === 0) return Math.hypot(px - ax, py - ay);
-  let t = ((px - ax) * dx + (py - ay) * dy) / lenSq;
-  t = Math.max(0, Math.min(1, t));
-  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }

@@ -61,11 +61,19 @@ function enemyPosition(enemy: EnemyState, earthCx: number, earthCy: number): { x
 
 interface HitRadiusOptions {
   hitRadiusInflatePx?: number;
+  hitRadiusScaleForEnemy?: (enemy: EnemyState) => number;
 }
 
 export interface LiveSegmentHitOptions extends HitRadiusOptions {
   minSegmentLengthPx: number;
   alreadyHitEnemyIds?: ReadonlySet<number>;
+  canHitEnemy?: (enemy: EnemyState, hitRadiusPx: number) => boolean;
+}
+
+function hitRadiusForEnemy(enemy: EnemyState, options: HitRadiusOptions): number {
+  const inflate = options.hitRadiusInflatePx ?? 0;
+  const scale = options.hitRadiusScaleForEnemy?.(enemy) ?? 1;
+  return enemy.radiusPx * scale + inflate;
 }
 
 /** Multi Cut 등급 (product-plan §6.3): 2 double / 3 triple / 5 mega / 7+ orbital_master. */
@@ -84,9 +92,10 @@ export function enemyTouchesImpactZone(
   earthR: number,
   zones: ZoneTable,
   gravitySwell = 1,
+  enemyImpactRadiusPx = enemyRadiusPx,
 ): boolean {
   const impactR = zones.impact * earthR * gravitySwell;
-  return enemyOrbitRadius - enemyRadiusPx <= impactR;
+  return enemyOrbitRadius - enemyImpactRadiusPx <= impactR;
 }
 
 export function resolveLineHits(
@@ -99,11 +108,10 @@ export function resolveLineHits(
   options: HitRadiusOptions = {},
 ): HitResult[] {
   const hits: HitResult[] = [];
-  const inflate = options.hitRadiusInflatePx ?? 0;
   for (const enemy of enemies) {
     if (!enemy.alive) continue;
     const pos = enemyPosition(enemy, earthCx, earthCy);
-    if (segmentIntersectsCircle(line, pos.x, pos.y, enemy.radiusPx + inflate)) {
+    if (segmentIntersectsCircle(line, pos.x, pos.y, hitRadiusForEnemy(enemy, options))) {
       hits.push({
         enemyId: enemy.id,
         band: distanceBand(enemy.radius, earthR, zones),
@@ -126,12 +134,13 @@ export function resolveLiveSegmentHits(
   if (segmentLength(segment) < options.minSegmentLengthPx) return [];
 
   const hits: HitResult[] = [];
-  const inflate = options.hitRadiusInflatePx ?? 0;
   for (const enemy of enemies) {
     if (!enemy.alive) continue;
     if (options.alreadyHitEnemyIds?.has(enemy.id)) continue;
     const pos = enemyPosition(enemy, earthCx, earthCy);
-    if (segmentIntersectsCircle(segment, pos.x, pos.y, enemy.radiusPx + inflate)) {
+    const hitRadiusPx = hitRadiusForEnemy(enemy, options);
+    if (options.canHitEnemy && !options.canHitEnemy(enemy, hitRadiusPx)) continue;
+    if (segmentIntersectsCircle(segment, pos.x, pos.y, hitRadiusPx)) {
       hits.push({
         enemyId: enemy.id,
         band: distanceBand(enemy.radius, earthR, zones),

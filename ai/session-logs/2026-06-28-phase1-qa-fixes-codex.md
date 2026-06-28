@@ -369,3 +369,51 @@ Not yet. Project-local implementation and release evidence only.
 2. Specifically test normal slash immediate hit, Last Save timing, and Solar Lance long line after naturally charging gauge.
 3. If Last Save or Solar Lance setup is too slow, add a DEV-only deterministic spawn/gauge QA harness.
 4. Then implement directional cut using contact segment angle.
+
+---
+
+## 2026-06-28 17:13 KST — Radius Separation + Same-Stroke Rehit + Non-Lethal Feedback
+
+User request:
+- Use subagents, implement the discussed hit-feel changes, and deploy to GitHub.
+
+Subagent:
+- `game-logic-reviewer` checked the proposed logic. It agreed that larger visual/slash radii improve feel, but flagged risks around heavy asteroid difficulty, visual-vs-Earth-contact mismatch, and Solar Lance being preempted by move-time hits.
+- Incorporated the review by keeping the Owner-requested 2.2x radii, while setting same-stroke rehit cooldown to a more conservative `80ms`.
+- `reviewer` blocked the first pass because Solar Lance live reservation still ran after an early hit, which could stop later normal hit/rehit checks in the same stroke.
+- Fixed the block by extracting `shouldReserveLiveSlashForSolarLance(...)` and returning `false` once `strokeHadHit` is true.
+
+Decisions made:
+- Enemy `radiusPx` now represents visual/slash hit size only.
+- Earth impact uses a separate `earthImpactRadiusPx`, defaulting to `EARTH_BODY_DIAMETER / 10` (`13px`) so larger enemies do not damage Earth early just because their sprite/hitbox grew.
+- Same-stroke repeated damage is allowed only after the pointer exits the hitbox plus margin, then enters again after cooldown. Re-arm happens after the current segment is resolved, so slow exit segments do not count as re-entry.
+- Live slash and Solar Lance hitboxes now include the same visual scale used by enemy rendering, so sprite bounds and slash bounds stay aligned.
+- Non-lethal hits now shake/scale the enemy sprite, so HP remains visible through feedback rather than silence.
+
+Files changed:
+- `src/data/enemies.json`
+- `src/game/CollisionSystem.ts`
+- `src/game/Enemy.ts`
+- `src/game/GameScene.ts`
+- `src/game/StrokeHitTracker.ts`
+- `src/game/HitShake.ts`
+- `src/game/SolarLanceReserve.ts`
+- `src/game/coords.ts`
+- `src/game/input-tuning.ts`
+- `src/game/types.ts`
+- tests under `src/game/*.test.ts`
+
+Verification:
+- `npm test`: 14 files, 105 tests passing.
+- `npm run build`: TypeScript + Vite production build passing.
+- Local Chrome smoke at `http://127.0.0.1:5173/?qaGauge=100&seed=1234`: one canvas fills mobile viewport, no page errors.
+
+Remaining risks:
+- Heavy asteroid at 2.2x (`128px`) may become too easy if same-stroke zig-zagging feels too forgiving.
+- Very small Earth contact radius may feel late if a huge asteroid visually overlaps Earth before impact. This needs real phone QA.
+- Solar Lance should be tested again on the public build because normal hitboxes are now larger.
+
+Next steps:
+1. Deploy to GitHub Pages and verify the public URL.
+2. Test on a real phone: heavy multi-hit re-entry, non-lethal shake, Last Save timing, Solar Lance with full gauge.
+3. If heavy becomes too easy, tune only `heavy_asteroid.radiusPx` down to `104~116` or raise rehit cooldown to `100~120ms`.

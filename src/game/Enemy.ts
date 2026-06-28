@@ -1,5 +1,5 @@
 import type { EnemyState, SpawnSpec, EnemyDef } from "./types";
-import { EARTH_CENTER_X, EARTH_CENTER_Y } from "./coords";
+import { EARTH_CENTER_X, EARTH_CENTER_Y, EARTH_ENEMY_IMPACT_RADIUS_PX } from "./coords";
 
 // 적 엔티티 (implementation-plan §1 [P1]). 나선 이동 로직은 순수하게 둔다.
 // 렌더(스프라이트) 배선 + 씬 연결은 Subagent B.
@@ -18,6 +18,7 @@ export function createEnemyState(spec: SpawnSpec, def: EnemyDef): EnemyState {
     angularSpeed: spec.angularSpeed, // 궤도 프로파일 적용된 최종값 (부호=방향)
     approachSpeed: spec.approachSpeed,
     radiusPx: def.radiusPx,
+    earthImpactRadiusPx: def.earthImpactRadiusPx ?? EARTH_ENEMY_IMPACT_RADIUS_PX,
     hp: def.hp,
     damage: def.damage,
     score: def.score,

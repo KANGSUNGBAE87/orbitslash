@@ -22,6 +22,7 @@ const enemyAt = (id: number, x: number, y: number, radiusPx = 10): EnemyState =>
   angularSpeed: 0,
   approachSpeed: 0,
   radiusPx,
+  earthImpactRadiusPx: 13,
   hp: 1,
   damage: 5,
   score: 100,
@@ -126,6 +127,12 @@ describe("enemyTouchesImpactZone", () => {
     // impactR = 60 * 1.25 = 75, enemy edge = 130 - 58 = 72.
     expect(enemyTouchesImpactZone(130, 58, 50, zones, 1.25)).toBe(true);
   });
+
+  it("별도 earth impact radius를 쓰면 커진 시각 반경이 지구 피격을 앞당기지 않는다", () => {
+    // visual/slash radius 128이어도 지구 충돌은 중심 기준 작은 contact radius만 사용한다.
+    expect(enemyTouchesImpactZone(100, 128, 50, zones, 1, 13)).toBe(false);
+    expect(enemyTouchesImpactZone(72, 128, 50, zones, 1, 13)).toBe(true);
+  });
 });
 
 describe("resolveLineHits", () => {
@@ -173,6 +180,18 @@ describe("resolveLiveSegmentHits", () => {
         minSegmentLengthPx: 12,
         hitRadiusInflatePx: 12,
         alreadyHitEnemyIds: new Set(),
+      }).map((h) => h.enemyId),
+    ).toEqual([1]);
+  });
+
+  it("visual scale이 적용된 sprite bounds까지 live hitbox로 본다", () => {
+    const enemies = [enemyAt(1, 50, 14, 10)];
+
+    expect(
+      resolveLiveSegmentHits(seg(0, 0, 100, 0), enemies, 0, 0, 50, zones, {
+        minSegmentLengthPx: 12,
+        hitRadiusInflatePx: 0,
+        hitRadiusScaleForEnemy: () => 1.5,
       }).map((h) => h.enemyId),
     ).toEqual([1]);
   });

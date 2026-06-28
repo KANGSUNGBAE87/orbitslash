@@ -11,6 +11,7 @@ export const EARTH_CENTER_Y = 900;
 export const EARTH_BODY_DIAMETER = 130;
 export const EARTH_BODY_RADIUS = EARTH_BODY_DIAMETER / 2;
 export const EARTH_GAMEPLAY_RADIUS = 58; // 기존 R=50의 약 1.16x. 거리밴드/충돌 기준은 시각보다 작게 유지.
+export const EARTH_ENEMY_IMPACT_RADIUS_PX = EARTH_BODY_DIAMETER / 10; // 적 visual radius와 분리된 지구 중심 contact radius.
 export const EARTH_SHIELD_DIAMETER = 182;
 export const EARTH_SHIELD_RADIUS = EARTH_SHIELD_DIAMETER / 2;
 export const LAST_SAVE_RING_DIAMETER = 226;
