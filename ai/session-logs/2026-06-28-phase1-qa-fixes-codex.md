@@ -331,3 +331,41 @@ Not yet. Project-local release evidence only.
 ### Promote to 지식저장소?
 
 Not yet. Project-local implementation and release evidence only.
+
+---
+
+## Deployment Evidence — Realtime Slash Judgement Tuning
+
+- Date: 2026-06-28 16:31 KST
+- Actor: codex
+- Stage: release
+
+### GitHub Deployment
+
+- Commit pushed to `main`: `4412072 tune realtime slash feel`
+- Actions run: `https://github.com/KANGSUNGBAE87/orbitslash/actions/runs/28315156495`
+- Live URL: `https://kangsungbae87.github.io/orbitslash/`
+
+### Verification
+
+- GitHub Actions:
+  - `build` job passed.
+  - `deploy` job passed.
+  - Annotation: GitHub reported Node.js 20 deprecation for several actions, but the runner forced Node.js 24 and the workflow succeeded.
+- Live URL:
+  - Live HTML references `./assets/index-DRGit0Tv.js`.
+  - `https://kangsungbae87.github.io/orbitslash/assets/index-DRGit0Tv.js` returned HTTP 200.
+  - Chrome mobile viewport `393x852` loaded a Pixi canvas at `786x1704` backing resolution.
+  - No console errors or page errors in public Pages smoke.
+
+### Notes
+
+- Public Pages is a production build, so dev-only `?qaGauge=100` is intentionally ignored. Solar Lance QA evidence for this change is from local DEV Chrome smoke.
+- Public smoke confirmed render and input stability, but not physical-device touch feel.
+
+### Next Steps
+
+1. Open the public URL on a real phone and test touch feel.
+2. Specifically test normal slash immediate hit, Last Save timing, and Solar Lance long line after naturally charging gauge.
+3. If Last Save or Solar Lance setup is too slow, add a DEV-only deterministic spawn/gauge QA harness.
+4. Then implement directional cut using contact segment angle.
