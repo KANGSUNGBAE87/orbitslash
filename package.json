@@ -1,0 +1,24 @@
+{
+  "name": "orbitslash",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Orbit Slash — Endless Orbital Slash Defense (Apps in Toss WebView mini-game)",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pixi.js": "^8.6.6"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^2.1.9",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8"
+  }
+}

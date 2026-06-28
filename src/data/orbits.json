@@ -1,0 +1,14 @@
+{
+  "profiles": [
+    { "angularMul": 0.5, "dir": 1 },
+    { "angularMul": 0.8, "dir": 1 },
+    { "angularMul": 1.1, "dir": 1 },
+    { "angularMul": 1.5, "dir": 1 },
+    { "angularMul": 2.0, "dir": 1 },
+    { "angularMul": 0.5, "dir": -1 },
+    { "angularMul": 0.8, "dir": -1 },
+    { "angularMul": 1.1, "dir": -1 },
+    { "angularMul": 1.5, "dir": -1 },
+    { "angularMul": 2.0, "dir": -1 }
+  ]
+}

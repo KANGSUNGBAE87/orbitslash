@@ -1,0 +1,24 @@
+{
+  "distanceMultiplier": { "outer": 1.0, "mid": 1.4, "danger": 2.2, "lastSave": 3.5 },
+  "accuracyMultiplier": { "normal": 1.0, "directional": 1.2, "weakCenter": 1.5, "bossWeak": 2.0 },
+  "comboMultiplier": [
+    { "min": 1,  "mult": 1.0 },
+    { "min": 5,  "mult": 1.2 },
+    { "min": 10, "mult": 1.5 },
+    { "min": 20, "mult": 2.0 },
+    { "min": 30, "mult": 2.5 }
+  ],
+  "comboGainPerSlashCap": null,
+  "multiCutBonus": { "double": 50, "triple": 120, "mega": 400, "orbital_master": 1000 },
+  "gaugeGain": {
+    "small_meteor": 1,
+    "basic_meteor": 1,
+    "fast_comet": 1,
+    "heavy_asteroid": 2,
+    "comboKill": 2,
+    "lastSave": 8,
+    "directionalCut": 3,
+    "bossWeakPoint": 10,
+    "rescueArrive": 5
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "rookie":   { "earthEnergy": 100, "gravitySwell": 1.00, "approachSpeedMul": 1.00 },
+  "defender": { "earthEnergy": 90,  "gravitySwell": 1.08, "approachSpeedMul": 1.20 },
+  "elite":    { "earthEnergy": 75,  "gravitySwell": 1.16, "approachSpeedMul": 1.45 },
+  "master":   { "earthEnergy": 60,  "gravitySwell": 1.25, "approachSpeedMul": 1.75 },
+  "zones": { "outer": 4.0, "mid": 3.0, "danger": 2.0, "lastSave": 1.3, "impact": 1.2 }
+}

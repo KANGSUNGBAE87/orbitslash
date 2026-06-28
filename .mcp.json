@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "codebase-memory-mcp": {
+      "command": "/Users/kangsungbae/.hermes/node/lib/node_modules/codebase-memory-mcp/bin/codebase-memory-mcp",
+      "env": { "HOME": "/Users/kangsungbae/Documents/orbitslash/.codebase-memory-home" }
+    }
+  }
+}
