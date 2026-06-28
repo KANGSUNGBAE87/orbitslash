@@ -397,6 +397,11 @@ Yes, lightweight platform note added at `/Users/kangsungbae/Documents/지식저�
   - All five enemy SVG assets returned HTTP 200.
   - No console messages or page errors.
   - Smoke screenshot: `/tmp/orbitslash-remaining-issues-smoke.png`.
+- GitHub:
+  - Commit pushed: `bdd5122` (`Implement Orbit Slash balance, assets, and backend readiness`).
+  - GitHub Pages workflow run `28323678650` completed successfully.
+  - Live URL smoke passed at `https://kangsungbae87.github.io/orbitslash/`.
+  - Live smoke screenshot: `/tmp/orbitslash-live-after-remaining-issues.png`.
 
 ---
 

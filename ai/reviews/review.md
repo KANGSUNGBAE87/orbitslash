@@ -18,7 +18,7 @@ This is the canonical current QA/readiness backlog. It tracks deferred manual QA
 ## Current State
 
 - Local implementation is ahead of `origin/main`.
-- Latest local changes are pending final commit/deploy at this checkpoint.
+- Latest local changes were committed and deployed to GitHub Pages.
 - Automated verification passed for the latest local state:
   - `npm test`: 28 files / 154 tests passed.
   - `npm run typecheck`: passed.
@@ -26,6 +26,7 @@ This is the canonical current QA/readiness backlog. It tracks deferred manual QA
   - `npm run preflight:release-boundary`: passed.
   - Production bundle string check: no `qaPreset` / `qaGauge` strings found in `dist`.
   - Local Chrome mobile smoke: canvas loaded at `412x915` CSS / `824x1830` backing pixels, all five enemy SVG assets returned 200, no console/page errors.
+  - GitHub Pages live smoke: canvas loaded at `412x915` CSS / `824x1830` backing pixels, enemy SVG asset returned 200, no console/page errors.
 - DEV-only QA presets are available for local device checks:
   - `?qaPreset=directional&qaGauge=100`
   - `?qaPreset=lastSave&qaGauge=100`
@@ -61,7 +62,7 @@ This is the canonical current QA/readiness backlog. It tracks deferred manual QA
 
 ### P0 — Solar Lance QA
 
-- [ ] Public production build: charge gauge naturally and trigger Solar Lance.
+- [ ] Public production build: charge gauge naturally and trigger Solar Lance on live GitHub Pages.
 - [ ] Local DEV build: verify `?qaGauge=100` still helps QA without affecting production.
 - [ ] Solar Lance long line should fire only on intended straight/earth-linked gesture.
 - [ ] Solar Lance should not be stolen by normal live slash hits while charging the gesture.

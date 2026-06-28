@@ -17,7 +17,7 @@ canonical: true
 - Current implementation target: local web playable build.
 - Public ranking: not ready.
 - Store release: not ready.
-- GitHub deployment for latest local changes: pending final commit/push.
+- GitHub deployment for latest local changes: done.
 - DEV-only QA presets: `?qaPreset=directional`, `?qaPreset=lastSave`, `?qaPreset=dense`.
 - Release-boundary preflight: local script added and passed on 2026-06-28.
 
@@ -62,3 +62,4 @@ Latest local verification:
 - `npm run preflight:release-boundary`: passed.
 - Production bundle string check: no `qaPreset` / `qaGauge` strings found in `dist`.
 - Local Chrome mobile smoke: canvas rendered, all five enemy SVG assets returned 200, no console/page errors.
+- GitHub Pages live smoke: canvas rendered, enemy SVG asset returned 200, no console/page errors.
