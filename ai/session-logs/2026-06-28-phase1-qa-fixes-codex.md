@@ -417,3 +417,40 @@ Next steps:
 1. Deploy to GitHub Pages and verify the public URL.
 2. Test on a real phone: heavy multi-hit re-entry, non-lethal shake, Last Save timing, Solar Lance with full gauge.
 3. If heavy becomes too easy, tune only `heavy_asteroid.radiusPx` down to `104~116` or raise rehit cooldown to `100~120ms`.
+
+---
+
+## Deployment Evidence — Slash Hit Feel Tuning
+
+- Date: 2026-06-28 17:24 KST
+- Actor: codex
+- Stage: release
+
+### GitHub Deployment
+
+- Commit pushed to `main`: `5853293 tune slash hit feel`
+- Actions run: `https://github.com/KANGSUNGBAE87/orbitslash/actions/runs/28316405276`
+- Live URL: `https://kangsungbae87.github.io/orbitslash/`
+
+### Verification
+
+- GitHub Actions:
+  - `build` job passed.
+  - `deploy` job passed.
+  - Annotation: GitHub reported Node.js 20 deprecation for several actions, but the runner forced Node.js 24 and the workflow succeeded.
+- Live URL:
+  - `curl -I -L https://kangsungbae87.github.io/orbitslash/` returned HTTP 200.
+  - Live HTML references `./assets/index-BA-VRIhK.js`.
+  - Chrome mobile viewport `412x915` loaded a Pixi canvas covering the viewport.
+  - No console errors or page errors in public Pages smoke.
+
+### Notes
+
+- Public smoke confirms deployment/render stability, not physical-device touch feel.
+- Real-phone QA remains the acceptance gate for heavy same-stroke rehit feel, non-lethal shake strength, Last Save timing, and Solar Lance with full gauge.
+
+### Next Steps
+
+1. Open the public URL on a real phone and test heavy multi-hit re-entry.
+2. Test Solar Lance after gauge is naturally full; if it is still hard to set up, add a DEV-only deterministic gauge/spawn harness.
+3. If heavy feels too easy, first raise `SAME_STROKE_REHIT_COOLDOWN_MS` to `100~120`, then consider lowering only `heavy_asteroid.radiusPx` to `104~116`.
