@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="shard meteor">
+  <defs>
+    <radialGradient id="shardMeteorCore" cx="40%" cy="35%" r="70%">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="35%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </radialGradient>
+    <linearGradient id="shardMeteorRim" x1="18%" y1="12%" x2="90%" y2="90%">
+      <stop offset="0%" stop-color="#e0f2fe"/>
+      <stop offset="55%" stop-color="#ffb86b"/>
+      <stop offset="100%" stop-color="#fb5b2e"/>
+    </linearGradient>
+    <filter id="shardMeteorGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <path d="M39 134 82 39l67 21 66 58-28 70-76 29Z" fill="url(#shardMeteorCore)" stroke="url(#shardMeteorRim)" stroke-width="9" stroke-linejoin="round"/>
+  <path d="M82 39 99 116 39 134M149 60l-33 72 71 56M99 116l88 2" fill="none" stroke="#e2e8f0" stroke-opacity=".34" stroke-width="7" stroke-linecap="round"/>
+  <path d="M36 69 67 42 57 86ZM199 55l28 22-36 9ZM207 171l24 35-46-10ZM70 209l-32 17 13-41Z" fill="#64748b" stroke="#ffb86b" stroke-opacity=".7" stroke-width="5" stroke-linejoin="round"/>
+  <circle cx="91" cy="83" r="10" fill="#f8fafc" opacity=".22"/>
+  <path d="M122 145 157 119" stroke="#ff7a2e" stroke-width="6" stroke-linecap="round" filter="url(#shardMeteorGlow)" opacity=".72"/>
+</svg>

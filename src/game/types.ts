@@ -48,6 +48,7 @@ export interface OrbitProfile {
 export interface WaveBand {
   fromMs: number;
   spawnIntervalMs?: number;
+  approachSpeedMul?: number;
   weights: Record<string, number>;
   maxConsecutive?: Record<string, number>;
 }
@@ -62,12 +63,14 @@ export interface EnemyState {
   approachSpeed: number;
   radiusPx: number;
   earthImpactRadiusPx: number;
+  maxHp?: number;
   directional: boolean;
   directionalSlashAngleRad?: number;
   directionalToleranceDeg?: number;
   hp: number;
   damage: number;
   score: number;
+  boss?: boolean;
   alive: boolean;
 }
 
@@ -85,6 +88,8 @@ export interface EnemyDef {
   directional: boolean;
   directionalSlashAngleDeg?: number;
   directionalToleranceDeg?: number;
+  boss?: boolean;
+  ignoreSpeedScale?: boolean;
 }
 export type EnemyTable = Record<string, EnemyDef>;
 

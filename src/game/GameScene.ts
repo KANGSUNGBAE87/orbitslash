@@ -4,7 +4,7 @@ import { LAYER } from "./layers";
 import { Earth } from "./Earth";
 import { RemoteConfig } from "./RemoteConfig";
 import { createRng } from "./Rng";
-import { WaveGenerator } from "./WaveGenerator";
+import { waveHudState, WaveGenerator } from "./WaveGenerator";
 import { ObjectManager } from "./ObjectManager";
 import { OrbitSpawner } from "./OrbitSpawner";
 import { GestureSystem } from "./GestureSystem";
@@ -40,7 +40,7 @@ import { SlashTrail } from "../render/SlashTrail";
 import { LaserVfx } from "../render/LaserVfx";
 import { HitBurst } from "../render/HitBurst";
 import { DestructionBurst } from "../render/DestructionBurst";
-import { drawDirectionalGuide, drawEnemyVisual, enemyTexture } from "../render/EnemyVisual";
+import { drawDirectionalGuide, drawEnemyVisual, enemyTexture, enemyVisualStyle } from "../render/EnemyVisual";
 import { Hud } from "../render/Hud";
 import { ResultOverlay } from "../render/ResultOverlay";
 import { multiCutLabel, lastSaveLabel, multiplierLabel } from "../ui/hud-labels";
@@ -55,6 +55,8 @@ import type { Point, EnemyState, EarthRef, ZoneTable, EnemyTable, ScoringConfig,
 const DIFFICULTY = "rookie"; // Phase 1: 단일 난이도 (오픈이슈 #2)
 const GAUGE_MAX = 100;
 const NORMAL_SLASH_DAMAGE = 1;
+const BOSS_EVERY_MS = 60000;
+const BOSS_ENEMY_TYPE = "eclipse_core";
 const DEV_QA_PRESETS = ["directional", "lastSave", "dense"] as const;
 type DevQaPreset = (typeof DEV_QA_PRESETS)[number];
 
@@ -225,7 +227,14 @@ export class GameScene {
     this.spawner = new OrbitSpawner(this.enemies, this.objects);
     const runStart = this.backend.beginLocalRun(DIFFICULTY, seedOverride ?? (Date.now() >>> 0));
     this.runSession = new RunSession(runStart);
-    this.wave = new WaveGenerator(createRng(runStart.seed), { difficulty: runStart.difficulty }, this.enemies, this.difficulty, this.orbits, this.waves);
+    this.wave = new WaveGenerator(
+      createRng(runStart.seed),
+      { difficulty: runStart.difficulty, bossEveryMs: BOSS_EVERY_MS, bossEnemyType: BOSS_ENEMY_TYPE },
+      this.enemies,
+      this.difficulty,
+      this.orbits,
+      this.waves,
+    );
     this.scoring = new ScoringSystem(this.scoringCfg);
     this.energy = new EnergySystem(diff.earthEnergy);
     this.skills = new SkillSystem(this.skillTable);
@@ -271,8 +280,10 @@ export class GameScene {
       make("small_meteor", 0, 420),
       make("basic_meteor", Math.PI * 0.35, 460),
       make("fast_comet", Math.PI * 0.72, 500),
+      make("iron_planet", Math.PI * 0.92, 520),
       make("heavy_asteroid", Math.PI * 1.1, 520),
       make("directional_comet", Math.PI * 1.45, 560),
+      make("ancient_planet", Math.PI * 1.75, 600),
     ]);
   }
 
@@ -427,9 +438,9 @@ export class GameScene {
 
     const kills = this.applyHits(hits, NORMAL_SLASH_DAMAGE, segment.b.t);
     for (const kill of kills) {
-      this.strokeKills.push(kill);
       this.spawnKillFeedback(kill);
     }
+    this.commitKills(kills, earth, true);
     this.updateStrokeHitRearm(segment);
     this.objects.prune();
   }
@@ -647,7 +658,52 @@ export class GameScene {
     } else {
       node.fallback.clear();
     }
-    drawDirectionalGuide(node.overlay, en, en.directional ? requiredDirectionalSlashAngleRad(en) : undefined);
+    this.drawEnemyOverlay(node.overlay, en);
+  }
+
+  private drawEnemyOverlay(g: Graphics, en: EnemyState, hitFeedback?: EnemyHitFeedbackState): void {
+    g.clear();
+    const r = en.radiusPx;
+    const style = enemyVisualStyle(en.type);
+    if (en.boss) {
+      g.circle(0, 0, r + 14).stroke({ width: 10, color: style.sparkleColor, alpha: 0.66 });
+      g.circle(0, 0, r + 30).stroke({ width: 4, color: 0xfef3c7, alpha: 0.34 });
+      g.circle(0, 0, r * 0.28).stroke({ width: 8, color: 0xffffff, alpha: 0.22 });
+    }
+    drawDirectionalGuide(g, en, en.directional ? requiredDirectionalSlashAngleRad(en) : undefined, false);
+
+    const maxHp = en.maxHp ?? en.hp;
+    const missingHp = Math.max(0, maxHp - en.hp);
+    if (maxHp > 1 && missingHp > 0) {
+      const crackLevel = Math.min(5, Math.ceil((missingHp / maxHp) * 5));
+      for (let i = 0; i < crackLevel; i += 1) {
+        const angle = -Math.PI * 0.75 + i * 0.72;
+        const inner = r * (0.18 + i * 0.045);
+        const outer = r * (0.62 + i * 0.035);
+        const bend = angle + 0.38;
+        g.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner)
+          .lineTo(Math.cos(bend) * (inner + outer) * 0.46, Math.sin(bend) * (inner + outer) * 0.46)
+          .lineTo(Math.cos(angle + 0.14) * outer, Math.sin(angle + 0.14) * outer)
+          .stroke({ width: Math.max(3, r * (en.boss ? 0.032 : 0.025)), color: style.crackColor, alpha: 0.34 + crackLevel * 0.09, cap: "round" });
+      }
+      if (missingHp >= Math.max(1, maxHp * 0.18)) {
+        const sparkleCount = en.boss ? 6 : 3;
+        for (let i = 0; i < sparkleCount; i += 1) {
+          const angle = i * ((Math.PI * 2) / sparkleCount) + missingHp * 0.19;
+          const x = Math.cos(angle) * r * (0.34 + (i % 2) * 0.22);
+          const y = Math.sin(angle) * r * (0.34 + ((i + 1) % 2) * 0.2);
+          const len = Math.max(8, r * (en.boss ? 0.07 : 0.055));
+          g.moveTo(x - len, y).lineTo(x + len, y).stroke({ width: 3, color: style.sparkleColor, alpha: 0.45, cap: "round" });
+          g.moveTo(x, y - len).lineTo(x, y + len).stroke({ width: 3, color: style.sparkleColor, alpha: 0.45, cap: "round" });
+        }
+      }
+    }
+
+    if (hitFeedback) {
+      const t = 1 - Math.min(1, hitFeedback.elapsedMs / hitFeedback.durationMs);
+      g.circle(0, 0, r + 10 + t * (en.boss ? 28 : 14)).stroke({ width: en.boss ? 10 : 6, color: 0xffffff, alpha: t * (en.boss ? 0.62 : 0.42) });
+      g.circle(0, 0, Math.max(10, r * 0.22 + t * r * 0.18)).stroke({ width: en.boss ? 7 : 4, color: style.sparkleColor, alpha: t * 0.48 });
+    }
   }
 
   // ── 메인 update (RAF) ─────────────────────────────────────────────────────
@@ -704,6 +760,7 @@ export class GameScene {
         const shake = hitFeedback
           ? enemyHitShakeOffset(en.id, hitFeedback.elapsedMs, hitFeedback.intensityPx, hitFeedback.durationMs)
           : { x: 0, y: 0, scale: 1 };
+        this.drawEnemyOverlay(g.overlay, en, hitFeedback);
         g.container.position.set(pos.x + shake.x, pos.y + shake.y);
         g.container.scale.set(this.enemyVisualScale(en) * shake.scale);
       }
@@ -720,6 +777,7 @@ export class GameScene {
 
     const snap = this.scoring.snapshot();
     const cost = this.skillTable.solar_lance.gaugeCost;
+    const wave = waveHudState(this.elapsedMs);
     this.hud.update(
       {
         energy: this.energy?.getEnergy() ?? 0,
@@ -732,6 +790,9 @@ export class GameScene {
         skillReady: this.skills?.isReady("solar_lance") ?? false,
         cooldownMs: this.skills?.cooldownRemaining("solar_lance") ?? 0,
         skillSlots: this.skillCooldownSlots(),
+        waveNumber: wave.waveNumber,
+        waveProgressRatio: wave.progressRatio,
+        nextWaveInMs: wave.nextWaveInMs,
         timeMs: this.elapsedMs,
       },
       dtMs,
@@ -740,11 +801,11 @@ export class GameScene {
 
   private skillCooldownSlots() {
     const defs = [
-      { id: "solar_lance", label: t("skill.solar_lance"), cost: this.skillTable.solar_lance.gaugeCost, active: true },
-      { id: "orbital_cut", label: t("skill.orbital_cut"), cost: this.skillTable.orbital_cut.gaugeCost, active: false },
-      { id: "gravity_slow", label: t("skill.gravity_slow"), cost: this.skillTable.gravity_slow.gaugeCost, active: true },
-      { id: "delta_shield", label: t("skill.delta_shield"), cost: this.skillTable.delta_shield.gaugeCost, active: false },
-      { id: "reserve_slot", label: t("skill.reserve_slot"), cost: this.skillTable.reserve_slot.gaugeCost, active: false },
+      { id: "solar_lance", label: t("skill.solar_lance"), cost: this.skillTable.solar_lance.gaugeCost, cooldownSec: this.skillTable.solar_lance.cooldownSec, active: true },
+      { id: "orbital_cut", label: t("skill.orbital_cut"), cost: this.skillTable.orbital_cut.gaugeCost, cooldownSec: this.skillTable.orbital_cut.cooldownSec, active: false },
+      { id: "gravity_slow", label: t("skill.gravity_slow"), cost: this.skillTable.gravity_slow.gaugeCost, cooldownSec: this.skillTable.gravity_slow.cooldownSec, active: true },
+      { id: "delta_shield", label: t("skill.delta_shield"), cost: this.skillTable.delta_shield.gaugeCost, cooldownSec: this.skillTable.delta_shield.cooldownSec, active: false },
+      { id: "reserve_slot", label: t("skill.reserve_slot"), cost: this.skillTable.reserve_slot.gaugeCost, cooldownSec: this.skillTable.reserve_slot.cooldownSec, active: false },
     ];
     return buildSkillCooldownSlots(defs, this.gauge, (skillId) => this.skills?.cooldownRemaining(skillId) ?? 0);
   }

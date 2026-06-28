@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="ancient planet">
+  <defs>
+    <radialGradient id="ancientPlanetBody" cx="38%" cy="30%" r="76%">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="46%" stop-color="#4c1d95"/>
+      <stop offset="100%" stop-color="#12051f"/>
+    </radialGradient>
+    <linearGradient id="ancientPlanetGold" x1="10%" y1="20%" x2="90%" y2="80%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="45%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </linearGradient>
+    <filter id="ancientPlanetGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <circle cx="128" cy="128" r="98" fill="url(#ancientPlanetBody)" stroke="url(#ancientPlanetGold)" stroke-width="7"/>
+  <ellipse cx="128" cy="128" rx="116" ry="34" fill="none" stroke="url(#ancientPlanetGold)" stroke-width="8" stroke-opacity=".68" transform="rotate(-15 128 128)"/>
+  <ellipse cx="128" cy="128" rx="79" ry="21" fill="none" stroke="#fef3c7" stroke-width="3" stroke-opacity=".34" transform="rotate(-15 128 128)"/>
+  <circle cx="128" cy="128" r="42" fill="none" stroke="#fbbf24" stroke-width="5" stroke-opacity=".7"/>
+  <circle cx="128" cy="128" r="19" fill="none" stroke="#fef3c7" stroke-width="4" stroke-opacity=".7"/>
+  <path d="M128 79v25M128 152v25M79 128h25M152 128h25M94 94l18 18M162 94l-18 18M94 162l18-18M162 162l-18-18" stroke="#fef3c7" stroke-width="5" stroke-linecap="round" opacity=".62"/>
+  <path d="M56 150c24 34 68 53 117 35M74 74c34-29 82-33 120-9" fill="none" stroke="#ddd6fe" stroke-width="6" stroke-linecap="round" opacity=".16"/>
+  <circle cx="82" cy="94" r="8" fill="#fbbf24" filter="url(#ancientPlanetGlow)" opacity=".85"/>
+  <circle cx="187" cy="159" r="7" fill="#fef3c7" filter="url(#ancientPlanetGlow)" opacity=".72"/>
+</svg>

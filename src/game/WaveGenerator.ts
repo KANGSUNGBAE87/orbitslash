@@ -10,9 +10,20 @@ export interface WaveConfig {
   difficulty: string;
   durationMs?: number;
   spawnIntervalMs?: number; // 평균 스폰 간격 (기본 800ms)
+  bossEveryMs?: number;
+  bossEnemyType?: string;
 }
 
 const DEFAULT_INTERVAL_MS = 800;
+export const WAVE_DURATION_MS = 10000;
+export const TOP_HUD_SAFE_Y = 370;
+const START_VISUAL_RADIUS_SAFE_SCALE = 0.7;
+
+export interface WaveHudState {
+  waveNumber: number;
+  progressRatio: number;
+  nextWaveInMs: number;
+}
 
 export class WaveGenerator {
   private rng: IRng;
@@ -25,6 +36,7 @@ export class WaveGenerator {
 
   // 결정적 진행 상태: 다음에 생성할 스폰의 예정 시각과 이미 반환한 경계.
   private nextSpawnAtMs = 0;
+  private nextBossAtMs = Infinity;
   private lastReturnedUntilMs = 0;
   private idSeq = 0;
   private lastEnemyType: string | undefined;
@@ -42,7 +54,7 @@ export class WaveGenerator {
     this.cfg = cfg;
     this.enemies = enemies;
     this.difficulty = difficulty;
-    this.enemyKeys = Object.keys(enemies);
+    this.enemyKeys = Object.keys(enemies).filter((key) => !enemies[key]?.boss);
     this.orbits = orbits.length > 0 ? orbits : [{ angularMul: 1, dir: 1 }];
     this.waves = waves;
     this.initFirstSpawn();
@@ -50,6 +62,7 @@ export class WaveGenerator {
 
   private initFirstSpawn(): void {
     this.nextSpawnAtMs = this.jitterInterval(0);
+    this.nextBossAtMs = this.cfg.bossEveryMs && this.cfg.bossEnemyType ? this.cfg.bossEveryMs : Infinity;
   }
 
   private intervalMs(elapsedMs: number): number {
@@ -83,16 +96,19 @@ export class WaveGenerator {
     return blocked;
   }
 
-  private makeSpec(spawnAtMs: number): SpawnSpec {
-    const enemyType = this.pickEnemyType(spawnAtMs);
-    this.recordEnemyType(enemyType);
+  private makeSpec(spawnAtMs: number, forcedEnemyType?: string): SpawnSpec {
+    const enemyType = forcedEnemyType ?? this.pickEnemyType(spawnAtMs);
+    if (!forcedEnemyType) this.recordEnemyType(enemyType);
     const def = this.enemies[enemyType]!;
-    const startAngleRad = safeStartAngleRad(this.rng.next() * 2 * Math.PI, def.startRadius);
+    const startAngleRad = safeStartAngleRad(this.rng.next() * 2 * Math.PI, def.startRadius, {
+      minY: TOP_HUD_SAFE_Y + def.radiusPx * START_VISUAL_RADIUS_SAFE_SCALE,
+    });
     // 궤도 프로파일 결정적 선택 (~10종) → 곡률·회전방향만 다양화 (접근속도는 제외).
     const profile = this.orbits[this.rng.nextInt(this.orbits.length)] ?? this.orbits[0]!;
     // 접근속도는 난이도별 배율(별도 변수)로 스케일 — 난이도 상승 시 함께 증가.
     const diff = this.difficulty[this.cfg.difficulty] as DifficultyDef | undefined;
-    const approachMul = diff?.approachSpeedMul ?? 1;
+    const band = activeWaveBand(this.waves, this.cfg.difficulty, spawnAtMs);
+    const approachMul = def.ignoreSpeedScale ? 1 : (diff?.approachSpeedMul ?? 1) * (band?.approachSpeedMul ?? 1);
     this.idSeq += 1;
     return {
       enemyType,
@@ -120,10 +136,16 @@ export class WaveGenerator {
    */
   next(elapsedMs: number): SpawnSpec[] {
     const out: SpawnSpec[] = [];
-    while (this.nextSpawnAtMs <= elapsedMs) {
-      const spawnAt = this.nextSpawnAtMs;
-      out.push(this.makeSpec(spawnAt));
-      this.nextSpawnAtMs = spawnAt + this.jitterInterval(spawnAt);
+    while (Math.min(this.nextSpawnAtMs, this.nextBossAtMs) <= elapsedMs) {
+      if (this.nextSpawnAtMs <= this.nextBossAtMs) {
+        const spawnAt = this.nextSpawnAtMs;
+        out.push(this.makeSpec(spawnAt));
+        this.nextSpawnAtMs = spawnAt + this.jitterInterval(spawnAt);
+      } else {
+        const spawnAt = this.nextBossAtMs;
+        out.push(this.makeSpec(spawnAt, this.cfg.bossEnemyType));
+        this.nextBossAtMs = spawnAt + (this.cfg.bossEveryMs ?? Infinity);
+      }
     }
     this.lastReturnedUntilMs = Math.max(this.lastReturnedUntilMs, elapsedMs);
     return out;
@@ -133,6 +155,7 @@ export class WaveGenerator {
   reset(rng: IRng): void {
     this.rng = rng;
     this.nextSpawnAtMs = 0;
+    this.nextBossAtMs = Infinity;
     this.lastReturnedUntilMs = 0;
     this.idSeq = 0;
     this.lastEnemyType = undefined;
@@ -158,6 +181,17 @@ export function activeWaveBand(waves: WaveTable | undefined, difficulty: string,
   return active;
 }
 
+export function waveHudState(elapsedMs: number, waveDurationMs = WAVE_DURATION_MS): WaveHudState {
+  const clamped = Math.max(0, elapsedMs);
+  const waveIndex = Math.floor(clamped / waveDurationMs);
+  const elapsedInWave = clamped - waveIndex * waveDurationMs;
+  return {
+    waveNumber: waveIndex + 1,
+    progressRatio: elapsedInWave / waveDurationMs,
+    nextWaveInMs: waveDurationMs - elapsedInWave,
+  };
+}
+
 export function pickWeightedEnemyType(
   rand: number,
   band: WaveBand,
@@ -181,7 +215,7 @@ export function safeStartAngleRad(
   options: { earthY?: number; minY?: number } = {},
 ): number {
   const earthY = options.earthY ?? EARTH_CENTER_Y;
-  const minY = options.minY ?? 230;
+  const minY = options.minY ?? TOP_HUD_SAFE_Y;
   const y = earthY + Math.sin(angleRad) * startRadius;
   if (y >= minY) return angleRad;
 

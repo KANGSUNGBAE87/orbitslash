@@ -1,7 +1,7 @@
 ---
 version: 0.1
 status: active
-updated: 2026-06-28
+updated: 2026-06-29
 canonical: true
 ---
 
@@ -14,19 +14,21 @@ This is the canonical current QA/readiness backlog. It tracks deferred manual QA
 - 2026-06-28 (codex): Created backlog after combo timeout, same-stroke rehit, directional cut, destruction VFX, distance multiplier feedback, and Last Save feedback local implementation.
 - 2026-06-28 (codex): Updated after wave shaping, low-frequency directional enemy, Gravity Slow, 5-slot HUD readiness, backend/ranking draft, release boundary scan, and platform notes. DEV-only QA harness remains deferred as QA work.
 - 2026-06-28 (codex): Updated after Gravity Slow reserve fix, inactive HUD slot gauge fix, directional/heavy anti-streak, top HUD spawn safety, DEV QA presets, SVG enemy sprite pass, hybrid ranking decision, and remote dormant Supabase schema apply.
+- 2026-06-28 (codex): Updated after 8-tier enemy data, 10-second wave gauge, 60-second fixed-speed boss scaffold, stronger Solar Lance, large top 5-slot HUD, and high-HP crack/hit overlay implementation.
+- 2026-06-28 (codex): Updated after subagent review fixes for deterministic boss scheduling, large-enemy top-HUD spawn safety, i18n seconds labels, and explicit Solar Lance/HUD/boss tests.
+- 2026-06-28 (codex): Updated after enemy asset pass, user-provided `eclipse_core` boss image integration, boss HP `50`, boss radius `340`, unique 9-enemy asset mapping, and type-colored crack/sparkle hit overlays.
+- 2026-06-29 (codex): Updated after live slash kills now commit score/gauge immediately during continuous dragging, so Solar Lance can charge without waiting for pointer release.
 
 ## Current State
 
-- Local implementation is ahead of `origin/main`.
-- Latest local changes were committed and deployed to GitHub Pages.
+- Latest gameplay batch includes 8-tier assets, `hp=50` boss scaffold, large 5-slot HUD, and live slash immediate kill rewards.
 - Automated verification passed for the latest local state:
-  - `npm test`: 28 files / 154 tests passed.
-  - `npm run typecheck`: passed.
+  - `npm test`: 32 files / 169 tests passed.
   - `npm run build`: passed.
   - `npm run preflight:release-boundary`: passed.
   - Production bundle string check: no `qaPreset` / `qaGauge` strings found in `dist`.
-  - Local Chrome mobile smoke: canvas loaded at `412x915` CSS / `824x1830` backing pixels, all five enemy SVG assets returned 200, no console/page errors.
-  - GitHub Pages live smoke: canvas loaded at `412x915` CSS / `824x1830` backing pixels, enemy SVG asset returned 200, no console/page errors.
+  - Local Chrome mobile smoke: not rerun after this latest gameplay batch.
+  - GitHub Pages live smoke: not rerun after this latest gameplay batch.
 - DEV-only QA presets are available for local device checks:
   - `?qaPreset=directional&qaGauge=100`
   - `?qaPreset=lastSave&qaGauge=100`
@@ -37,12 +39,15 @@ This is the canonical current QA/readiness backlog. It tracks deferred manual QA
 ### P0 — Real Device Touch Feel
 
 - [ ] General slash: immediate contact hit should feel instant while dragging.
+- [ ] Live slash reward feel: Solar Lance gauge should rise during a continuous drag as soon as enemies die.
 - [ ] Heavy asteroid re-entry: same stroke should damage once on entry, wait until exit margin, then damage again on re-entry.
 - [ ] Heavy asteroid non-lethal hit: shake should be obvious enough that "hit but HP remains" is understood.
 - [ ] Combo timeout `650ms`: long drag should not keep combo alive forever, but natural quick chains should still feel rewarding.
 - [ ] Gravity Slow first-try success: closed circle should trigger at least 8/10 attempts on phone.
 - [ ] Gravity Slow false positives: half-circle/open spiral should trigger at most 1/10 attempts.
 - [ ] Normal slash vs short tap: tap or tiny movement should not accidentally damage enemies.
+- [ ] 8-tier pacing: HP `1/3/5/7/9/11/13/15` should feel like depth, not drag.
+- [ ] High-HP crack overlay should make non-lethal hits legible on phone.
 
 ### P0 — Directional Cut Feel
 
@@ -66,6 +71,19 @@ This is the canonical current QA/readiness backlog. It tracks deferred manual QA
 - [ ] Local DEV build: verify `?qaGauge=100` still helps QA without affecting production.
 - [ ] Solar Lance long line should fire only on intended straight/earth-linked gesture.
 - [ ] Solar Lance should not be stolen by normal live slash hits while charging the gesture.
+- [ ] Solar Lance widened effect should feel powerful without deleting too much of the screen.
+- [ ] Solar Lance should remain readable with 260px-class beam VFX.
+
+### P0 — Wave and Boss Feel
+
+- [ ] 10-second wave gauge should be readable and not distract from enemy motion.
+- [ ] Wave boundary every 10 seconds should feel like progression, not abrupt difficulty spikes.
+- [ ] Boss should appear every 60 seconds at fixed speed.
+- [ ] Boss arrival should not stop normal small planets from spawning.
+- [ ] First boss HP 50 should feel boss-like but not tedious.
+- [ ] Boss image should read as a boss immediately and not blend into normal large planets.
+- [ ] Boss non-lethal hits should feel clearly registered despite the long 50-hit scaffold.
+- [ ] Add/verify boss HP bar or remaining-hit indicator before treating the 50-hit boss as final-feel ready.
 
 ### P1 — Visual Noise and Performance
 
@@ -75,6 +93,7 @@ This is the canonical current QA/readiness backlog. It tracks deferred manual QA
 - [ ] Mobile WebView performance should stay smooth during dense particle bursts.
 - [ ] Top HUD area: enemies should not become unreadable behind score/cooldown UI.
 - [ ] Confirm top-HUD safe spawn adjustment does not make enemy entry feel artificially constrained.
+- [ ] Large 5-slot HUD should fit on real mobile browser/WebView with status/address bars.
 
 ### P1 — Earth and Impact Feel
 
@@ -106,10 +125,11 @@ Goal:
 
 Tasks:
 - [x] Add wave composition rules instead of uniform enemy selection.
-- [x] Add early/mid/late elapsed-time bands for enemy mix.
+- [x] Add 10-second wave bands for enemy mix and speed shaping.
 - [x] Lower heavy density early via wave bands.
 - [x] Add top HUD spawn exclusion / safe start-angle rule.
 - [x] Add deterministic DEV presets for common QA waves.
+- [x] Add wave HUD state/progress for 10-second waves.
 
 ### 3. DEV-only QA Harness
 
@@ -129,6 +149,7 @@ Goal:
 
 Tasks:
 - [x] Keep cooldown display in the top strip with 5 compact slots.
+- [x] Replace compact strip with large top 5-slot HUD.
 - [x] Implement next skill candidate `gravity_slow`.
 - [x] Add input gesture, cooldown, gauge cost, VFX, tests, and HUD state for `gravity_slow`.
 - [x] Fix Gravity Slow live reserve so open spiral-like gestures do not steal normal slash.
@@ -144,6 +165,10 @@ Goal:
 Tasks:
 - [x] Centralize procedural enemy drawing in `EnemyVisual` so asset replacement has one boundary.
 - [x] Replace meteor/comet/asteroid placeholders with SVG sprite assets.
+- [x] Add unique asset mapping for all 8 normal enemy tiers and the first boss.
+- [x] Integrate user-provided first boss image as `eclipse_core`.
+- [x] Add generated SVG assets for `shard_meteor`, `iron_planet`, and `ancient_planet`.
+- [x] Add type-colored crack/sparkle overlay tokens for stronger hit readability.
 - [x] Keep `enemy.radiusPx` as slash hit bounds while sprites scale to that radius.
 - [x] Keep directional guide overlay readable on final assets.
 - [ ] Re-test visual size and hit feel after asset swap.
@@ -175,13 +200,31 @@ Tasks:
 - [ ] Touch latency/performance check.
 - [ ] Privacy/data safety and platform adapter review.
 
+### 8. Boss Scaffold
+
+Goal:
+- Add a first procedural boss loop before final boss assets and weak-point systems.
+
+Tasks:
+- [x] Add `eclipse_core` boss enemy data.
+- [x] Spawn boss every 60 seconds independently from normal waves.
+- [x] Keep normal planet spawning while boss is present.
+- [x] Keep boss speed fixed outside wave speed scaling.
+- [x] Add tests for boss schedule and speed.
+- [x] Retune first boss scaffold to `hp=50`, `radiusPx=340`, and user-provided image.
+- [ ] Add boss arrival warning/banner.
+- [ ] Add boss HP bar or remaining-hit indicator.
+- [ ] Add real boss weak points / multi-part boss behavior.
+- [ ] Add final boss weak-point/pattern art assets.
+
 ## Recommended Next Implementation
 
-Start with **real-device product QA + server ranking implementation**, not more client feature work.
+Start with **real-device gameplay QA on the new local build**, then tune values before server/ranking work.
 
 Default recommendation:
-- Run one physical-device pass against the latest local build or next deployment.
-- If feel is acceptable, tune wave weights and then choose the ranking strategy.
+- Run one physical-device pass against the latest local build.
+- Focus on new enemy image readability, `hp=50/radius=340` boss feel, boss non-lethal hit feedback, 10-second wave gauge, Solar Lance access, and large top 5-slot HUD.
+- Next implementation should add boss arrival warning + boss HP/remaining-hit UI, then proceed to 7-second wave/Solar Lance charge tuning.
 
 Reason:
 - The implementation queue is now mostly in place; the highest risk is touch feel, readability, and platform release assumptions.

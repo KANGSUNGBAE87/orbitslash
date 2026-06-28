@@ -98,24 +98,24 @@ describe("ScoringSystem.onHit (콤보 += N, Multi Cut, 게이지, Last Save)", (
 
   it("게이지: 적별 gaugeGain 합 + 콤보 처치(2)", () => {
     const s = new ScoringSystem(cfg);
-    // 2마리 basic_meteor(+1 each) = 2, comboKill +2 = 4
+    // 2마리 basic_meteor(+2 each) = 4, comboKill +2 = 6
     const out = s.onHit([hit("outer", 1), hit("outer", 2)], () => 100, () => "basic_meteor");
-    expect(out.gauge).toBe(2 + 2);
+    expect(out.gauge).toBe(4 + 2);
   });
 
   it("directional accuracy면 directionalCut 게이지를 추가한다", () => {
     const s = new ScoringSystem(cfg);
     const out = s.onHit([{ ...hit("outer", 1), accuracy: "directional" }], () => 100, () => "fast_comet");
 
-    expect(out.gauge).toBe(1 + 3);
+    expect(out.gauge).toBe(2 + 3);
   });
 
   it("Last Save 밴드면 lastSave 플래그 true + 게이지 +8", () => {
     const s = new ScoringSystem(cfg);
     const out = s.onHit([hit("lastSave", 1)], () => 100, () => "basic_meteor");
     expect(out.lastSave).toBe(true);
-    // basic +1, lastSave +8 (콤보 1마리라 comboKill 없음)
-    expect(out.gauge).toBe(1 + 8);
+    // basic +2, lastSave +8 (콤보 1마리라 comboKill 없음)
+    expect(out.gauge).toBe(2 + 8);
   });
 
   it("comboGainPerSlashCap=null → 무제한 (5마리면 +5)", () => {

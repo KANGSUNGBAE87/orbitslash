@@ -19,12 +19,14 @@ export function createEnemyState(spec: SpawnSpec, def: EnemyDef): EnemyState {
     approachSpeed: spec.approachSpeed,
     radiusPx: def.radiusPx,
     earthImpactRadiusPx: def.earthImpactRadiusPx ?? EARTH_ENEMY_IMPACT_RADIUS_PX,
+    maxHp: def.hp,
     directional: def.directional,
     directionalSlashAngleRad: def.directional && def.directionalSlashAngleDeg != null ? directionalSlashAngleRad(def.directionalSlashAngleDeg) : undefined,
     directionalToleranceDeg: def.directional ? (def.directionalToleranceDeg ?? 30) : undefined,
     hp: def.hp,
     damage: def.damage,
     score: def.score,
+    boss: def.boss,
     alive: true,
   };
 }

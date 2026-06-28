@@ -4,9 +4,6 @@ import { LAYER } from "../game/layers";
 import { t } from "../i18n";
 import { energyLabel, scoreLabel, timeLabel, comboLabel } from "../ui/hud-labels";
 
-// HUD 오버레이 (design §6). 텍스트/숫자는 전부 코드 렌더 (이미지에 굽지 않음, i18n 경유).
-// 게임필드는 Canvas(PixiJS) — HUD도 PixiJS Text로 캔버스 안에서 그린다 (DOM 회피, §28-1).
-
 export interface HudState {
   energy: number;
   maxEnergy: number;
@@ -18,6 +15,9 @@ export interface HudState {
   skillReady: boolean;
   cooldownMs: number;
   skillSlots: SkillCooldownSlot[];
+  waveNumber: number;
+  waveProgressRatio: number;
+  nextWaveInMs: number;
   timeMs: number;
 }
 
@@ -25,9 +25,21 @@ export interface SkillCooldownSlot {
   id: string;
   label: string;
   ratio: number;
+  cooldownRatio: number;
   ready: boolean;
   cooldownMs: number;
   active: boolean;
+  visualState: "locked" | "charging" | "cooldown" | "ready";
+}
+
+export interface TopSkillSlotLayout {
+  x: number;
+  y: number;
+  radius: number;
+  cardX: number;
+  cardY: number;
+  cardW: number;
+  cardH: number;
 }
 
 const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
@@ -36,12 +48,37 @@ function label(opts: Partial<TextStyleOptions>): TextStyle {
   return { fontFamily: FONT, fill: 0xffffff, fontSize: 28, ...opts } as TextStyle;
 }
 
-const SKILL_CX = BASE_WIDTH / 2;
-const SKILL_CY = 1660;
-const SKILL_R = 78;
-const STRIP_Y = 146;
-const STRIP_SLOT_R = 23;
-const STRIP_SLOT_GAP = 16;
+const SKILL_ROW_X = 24;
+const SKILL_ROW_Y = 124;
+const SKILL_ROW_W = BASE_WIDTH - SKILL_ROW_X * 2;
+const SKILL_ROW_H = 170;
+const SKILL_ORB_R = 62;
+const SKILL_ORB_Y = 188;
+const SKILL_CARD_W = 184;
+const SKILL_CARD_H = 154;
+const WAVE_BAR_X = 72;
+const WAVE_BAR_Y = 312;
+const WAVE_BAR_W = BASE_WIDTH - WAVE_BAR_X * 2;
+const WAVE_BAR_H = 18;
+
+export function topSkillSlotLayout(count: number): TopSkillSlotLayout[] {
+  if (count <= 0) return [];
+  const firstX = 132;
+  const lastX = BASE_WIDTH - firstX;
+  const step = count === 1 ? 0 : (lastX - firstX) / (count - 1);
+  return Array.from({ length: count }, (_, i) => {
+    const x = Math.round(firstX + step * i);
+    return {
+      x,
+      y: SKILL_ORB_Y,
+      radius: SKILL_ORB_R,
+      cardX: x - SKILL_CARD_W / 2,
+      cardY: SKILL_ROW_Y + 8,
+      cardW: SKILL_CARD_W,
+      cardH: SKILL_CARD_H,
+    };
+  });
+}
 
 export class Hud {
   readonly container: Container;
@@ -53,11 +90,11 @@ export class Hud {
   private banner: Text;
   private bannerAge = Infinity;
 
-  private skillRing: Graphics;
-  private skillIcon: Graphics;
-  private skillText: Text;
-  private cooldownStrip: Graphics;
-  private cooldownTexts: Text[] = [];
+  private skillRow: Graphics;
+  private waveGauge: Graphics;
+  private waveText: Text;
+  private slotCenterTexts: Text[] = [];
+  private slotLabelTexts: Text[] = [];
   private readyPulse = 0;
 
   constructor() {
@@ -65,37 +102,30 @@ export class Hud {
     this.container.zIndex = LAYER.HUD_PANELS;
     this.container.sortableChildren = true;
 
-    // 좌상단 에너지
     this.energyText = new Text({ text: "", style: label({ fontSize: 30, fill: 0x9fe9ff }) });
     this.energyText.position.set(40, 40);
 
-    // 중앙 상단 점수
     this.scoreText = new Text({ text: "", style: label({ fontSize: 38, fontWeight: "bold", align: "center" }) });
     this.scoreText.anchor.set(0.5, 0);
-    this.scoreText.position.set(BASE_WIDTH / 2, 40);
+    this.scoreText.position.set(BASE_WIDTH / 2, 32);
 
-    // 우상단 생존 시간
     this.timeText = new Text({ text: "", style: label({ fontSize: 30, fill: 0xf5b042, align: "right" }) });
     this.timeText.anchor.set(1, 0);
     this.timeText.position.set(BASE_WIDTH - 40, 40);
 
-    // 콤보 (중앙)
     this.comboText = new Text({ text: "", style: label({ fontSize: 56, fontWeight: "bold", fill: 0xffd84d, align: "center" }) });
     this.comboText.anchor.set(0.5);
-    this.comboText.position.set(BASE_WIDTH / 2, 360);
+    this.comboText.position.set(BASE_WIDTH / 2, 380);
 
-    // 배너 (Last Save / Multi Cut)
     this.banner = new Text({ text: "", style: label({ fontSize: 64, fontWeight: "bold", fill: 0x3fd8ff, align: "center" }) });
     this.banner.anchor.set(0.5);
-    this.banner.position.set(BASE_WIDTH / 2, 560);
+    this.banner.position.set(BASE_WIDTH / 2, 580);
 
-    // 하단 Solar Lance 스킬 버튼 (게이지 링 + 쿨타임)
-    this.skillRing = new Graphics();
-    this.skillIcon = new Graphics();
-    this.cooldownStrip = new Graphics();
-    this.skillText = new Text({ text: t("skill.solar_lance"), style: label({ fontSize: 24, fill: 0xffc14d, align: "center" }) });
-    this.skillText.anchor.set(0.5, 0);
-    this.skillText.position.set(SKILL_CX, SKILL_CY + SKILL_R + 12);
+    this.skillRow = new Graphics();
+    this.waveGauge = new Graphics();
+    this.waveText = new Text({ text: "", style: label({ fontSize: 23, fontWeight: "bold", fill: 0xdbeafe, align: "center" }) });
+    this.waveText.anchor.set(0.5, 0.5);
+    this.waveText.position.set(BASE_WIDTH / 2, WAVE_BAR_Y + 34);
 
     this.container.addChild(
       this.energyText,
@@ -103,10 +133,9 @@ export class Hud {
       this.timeText,
       this.comboText,
       this.banner,
-      this.cooldownStrip,
-      this.skillRing,
-      this.skillIcon,
-      this.skillText,
+      this.skillRow,
+      this.waveGauge,
+      this.waveText,
     );
   }
 
@@ -123,7 +152,6 @@ export class Hud {
     this.timeText.text = `${timeLabel()}  ${formatTime(s.timeMs)}`;
     this.comboText.text = s.combo >= 2 ? `${comboLabel()} x${s.combo}  (×${s.comboMult.toFixed(1)})` : "";
 
-    // 배너 페이드
     if (this.bannerAge < 900) {
       this.bannerAge += dtMs;
       this.banner.alpha = Math.max(0, 1 - this.bannerAge / 900);
@@ -131,93 +159,116 @@ export class Hud {
       this.banner.alpha = 0;
     }
 
-    this.drawSkillButton(s, dtMs);
-    this.drawCooldownStrip(s.skillSlots);
-  }
-
-  private drawSkillButton(s: HudState, dtMs: number): void {
-    const ratio = Math.max(0, Math.min(1, s.gauge / s.gaugeCost));
-    const ready = s.skillReady && ratio >= 1;
-    if (ready) this.readyPulse += dtMs / 1000;
+    if (s.skillSlots.some((slot) => slot.ready)) this.readyPulse += dtMs / 1000;
     else this.readyPulse = 0;
 
-    this.skillRing.clear();
-    if (ready) {
-      const pulse = (Math.sin(this.readyPulse * 8) + 1) / 2;
-      this.skillRing
-        .circle(SKILL_CX, SKILL_CY, SKILL_R + 10 + pulse * 8)
-        .stroke({ width: 5, color: 0xffc14d, alpha: 0.28 + pulse * 0.32 });
-    }
-    // 베이스 링
-    this.skillRing.circle(SKILL_CX, SKILL_CY, SKILL_R).stroke({ width: 6, color: 0x274060, alpha: 0.9 });
-    // 게이지 호 (위에서 시계방향)
-    if (ratio > 0) {
-      const start = -Math.PI / 2;
-      this.skillRing.moveTo(SKILL_CX, SKILL_CY - SKILL_R);
-      this.skillRing.arc(SKILL_CX, SKILL_CY, SKILL_R, start, start + ratio * Math.PI * 2);
-      this.skillRing.stroke({ width: 6, color: ready ? 0xffc14d : 0x3fd8ff, alpha: 0.95 });
-    }
-
-    // 아이콘 (간단 골드 렌즈)
-    this.skillIcon.clear();
-    this.skillIcon
-      .circle(SKILL_CX, SKILL_CY, SKILL_R - 14)
-      .fill({ color: ready ? 0xf59e0b : 0x1a2740, alpha: ready ? 0.85 : 0.7 });
-    this.skillIcon
-      .circle(SKILL_CX, SKILL_CY, SKILL_R - 14)
-      .stroke({ width: 2, color: 0xffc14d, alpha: ready ? 1 : 0.5 });
-
-    this.skillText.text = t("skill.solar_lance");
-    this.skillText.style.fill = ready ? 0xffc14d : 0x88aacc;
+    this.drawSkillSlots(s.skillSlots);
+    this.drawWaveGauge(s);
   }
 
-  private drawCooldownStrip(slots: SkillCooldownSlot[]): void {
-    this.ensureCooldownTexts(slots.length);
-    this.cooldownStrip.clear();
-    if (slots.length === 0) return;
+  private drawSkillSlots(slots: SkillCooldownSlot[]): void {
+    const layout = topSkillSlotLayout(slots.length);
+    this.ensureSlotTexts(slots.length);
+    this.skillRow.clear();
+    this.skillRow
+      .roundRect(SKILL_ROW_X, SKILL_ROW_Y, SKILL_ROW_W, SKILL_ROW_H, 30)
+      .fill({ color: 0x080b16, alpha: 0.58 });
 
-    const step = STRIP_SLOT_R * 2 + STRIP_SLOT_GAP;
-    const totalW = slots.length * STRIP_SLOT_R * 2 + (slots.length - 1) * STRIP_SLOT_GAP;
-    const startX = BASE_WIDTH / 2 - totalW / 2 + STRIP_SLOT_R;
-    this.cooldownStrip
-      .roundRect(BASE_WIDTH / 2 - totalW / 2 - 18, STRIP_Y - STRIP_SLOT_R - 14, totalW + 36, STRIP_SLOT_R * 2 + 28, 18)
-      .fill({ color: 0x080b16, alpha: 0.52 });
-
-    for (let i = 0; i < this.cooldownTexts.length; i++) {
-      const text = this.cooldownTexts[i]!;
+    for (let i = 0; i < this.slotCenterTexts.length; i += 1) {
       const slot = slots[i];
-      text.visible = Boolean(slot);
-      if (!slot) continue;
+      const cell = layout[i];
+      const centerText = this.slotCenterTexts[i]!;
+      const labelText = this.slotLabelTexts[i]!;
+      centerText.visible = Boolean(slot && cell);
+      labelText.visible = Boolean(slot && cell);
+      if (!slot || !cell) continue;
 
-      const x = startX + i * step;
-      const baseColor = slot.active ? 0xffc14d : 0x334155;
-      const fillColor = slot.ready ? 0xffc14d : slot.active ? 0x1b2a44 : 0x111827;
-      this.cooldownStrip.circle(x, STRIP_Y, STRIP_SLOT_R).fill({ color: fillColor, alpha: slot.active ? 0.82 : 0.56 });
-      this.cooldownStrip.circle(x, STRIP_Y, STRIP_SLOT_R).stroke({ width: 2, color: baseColor, alpha: slot.active ? 0.9 : 0.45 });
+      const ready = slot.visualState === "ready";
+      const locked = slot.visualState === "locked";
+      const cooldown = slot.visualState === "cooldown";
+      const charging = slot.visualState === "charging";
+      const pulse = ready ? (Math.sin(this.readyPulse * 14) + 1) / 2 : 0;
+      const rim = ready ? 0xffc14d : cooldown ? 0xf97316 : charging ? 0x3fd8ff : 0x475569;
+      const fill = ready ? 0xf59e0b : locked ? 0x111827 : 0x172033;
 
-      if (slot.ratio > 0 && slot.ratio < 1) {
-        const start = -Math.PI / 2;
-        this.cooldownStrip.moveTo(x, STRIP_Y - STRIP_SLOT_R);
-        this.cooldownStrip.arc(x, STRIP_Y, STRIP_SLOT_R, start, start + slot.ratio * Math.PI * 2);
-        this.cooldownStrip.stroke({ width: 3, color: 0x3fd8ff, alpha: 0.85 });
+      this.skillRow.roundRect(cell.cardX, cell.cardY, cell.cardW, cell.cardH, 24).fill({ color: 0x050914, alpha: locked ? 0.42 : 0.68 });
+      this.skillRow.roundRect(cell.cardX, cell.cardY, cell.cardW, cell.cardH, 24).stroke({ width: ready ? 3 : 1.5, color: rim, alpha: ready ? 0.8 : 0.35 });
+      if (ready) {
+        this.skillRow.circle(cell.x, cell.y, cell.radius + 7 + pulse * 9).stroke({ width: 8, color: 0xffd166, alpha: 0.25 + pulse * 0.4 });
       }
 
-      text.text = slot.cooldownMs > 0 && slot.cooldownMs <= 3000
-        ? `${Math.ceil(slot.cooldownMs / 1000)}`
-        : slot.label.slice(0, 1).toUpperCase();
-      text.style.fill = slot.ready ? 0x111827 : slot.active ? 0xffffff : 0x94a3b8;
-      text.position.set(x, STRIP_Y);
+      this.skillRow.circle(cell.x, cell.y, cell.radius).fill({ color: fill, alpha: locked ? 0.45 : 0.88 });
+      this.skillRow.circle(cell.x, cell.y, cell.radius).stroke({ width: 9, color: 0x1e293b, alpha: locked ? 0.55 : 0.85 });
+
+      const ringRatio = cooldown ? 1 - slot.cooldownRatio : slot.ratio;
+      if (ringRatio > 0) {
+        const start = -Math.PI / 2;
+        this.skillRow.moveTo(cell.x, cell.y - cell.radius);
+        this.skillRow.arc(cell.x, cell.y, cell.radius, start, start + Math.min(1, ringRatio) * Math.PI * 2);
+        this.skillRow.stroke({ width: 10, color: rim, alpha: locked ? 0.25 : 0.95 });
+      }
+
+      if (ready) {
+        const sweepX = cell.x - cell.radius + ((this.readyPulse * 120) % (cell.radius * 2));
+        this.skillRow.moveTo(sweepX - 18, cell.y - cell.radius * 0.72);
+        this.skillRow.lineTo(sweepX + 18, cell.y + cell.radius * 0.72);
+        this.skillRow.stroke({ width: 6, color: 0xffffff, alpha: 0.22, cap: "round" });
+      }
+
+      centerText.text = centerTextForSlot(slot);
+      centerText.style.fill = ready ? 0x111827 : locked ? 0x94a3b8 : 0xffffff;
+      centerText.style.fontSize = ready ? 27 : 30;
+      centerText.position.set(cell.x, cell.y);
+
+      labelText.text = shortSkillLabel(slot);
+      labelText.style.fill = ready ? 0xffd166 : locked ? 0x64748b : 0xdbeafe;
+      labelText.position.set(cell.x, SKILL_ROW_Y + SKILL_ROW_H - 24);
     }
   }
 
-  private ensureCooldownTexts(count: number): void {
-    while (this.cooldownTexts.length < count) {
-      const txt = new Text({ text: "", style: label({ fontSize: 21, fontWeight: "bold", fill: 0xffffff, align: "center" }) });
-      txt.anchor.set(0.5);
-      this.cooldownTexts.push(txt);
-      this.container.addChild(txt);
+  private drawWaveGauge(s: HudState): void {
+    const ratio = Math.max(0, Math.min(1, s.waveProgressRatio));
+    this.waveGauge.clear();
+    this.waveGauge.roundRect(WAVE_BAR_X, WAVE_BAR_Y, WAVE_BAR_W, WAVE_BAR_H, 9).fill({ color: 0x111827, alpha: 0.82 });
+    this.waveGauge.roundRect(WAVE_BAR_X, WAVE_BAR_Y, WAVE_BAR_W * ratio, WAVE_BAR_H, 9).fill({ color: 0x3fd8ff, alpha: 0.92 });
+    for (let i = 1; i < 6; i += 1) {
+      const x = WAVE_BAR_X + (WAVE_BAR_W * i) / 6;
+      this.waveGauge.moveTo(x, WAVE_BAR_Y - 4).lineTo(x, WAVE_BAR_Y + WAVE_BAR_H + 4);
+      this.waveGauge.stroke({ width: 2, color: i === 5 ? 0xffc14d : 0xffffff, alpha: i === 5 ? 0.7 : 0.24 });
+    }
+    this.waveGauge.roundRect(WAVE_BAR_X, WAVE_BAR_Y, WAVE_BAR_W, WAVE_BAR_H, 9).stroke({ width: 2, color: 0x274060, alpha: 0.9 });
+
+    const seconds = Math.ceil(s.nextWaveInMs / 1000);
+    this.waveText.text = `${t("hud.wave")} ${s.waveNumber}  ·  ${secondsLabel(seconds)}`;
+  }
+
+  private ensureSlotTexts(count: number): void {
+    while (this.slotCenterTexts.length < count) {
+      const center = new Text({ text: "", style: label({ fontSize: 30, fontWeight: "bold", fill: 0xffffff, align: "center" }) });
+      center.anchor.set(0.5);
+      const name = new Text({ text: "", style: label({ fontSize: 18, fontWeight: "bold", fill: 0xdbeafe, align: "center" }) });
+      name.anchor.set(0.5);
+      this.slotCenterTexts.push(center);
+      this.slotLabelTexts.push(name);
+      this.container.addChild(center, name);
     }
   }
+}
+
+function centerTextForSlot(slot: SkillCooldownSlot): string {
+  if (slot.visualState === "locked") return "·";
+  if (slot.visualState === "ready") return t("skill.ready");
+  if (slot.visualState === "cooldown") return secondsLabel(Math.ceil(slot.cooldownMs / 1000));
+  return `${Math.floor(slot.ratio * 100)}%`;
+}
+
+function secondsLabel(seconds: number): string {
+  return t("unit.seconds", { value: seconds });
+}
+
+function shortSkillLabel(slot: SkillCooldownSlot): string {
+  if (slot.label.length <= 5) return slot.label;
+  return slot.label.slice(0, 5);
 }
 
 function formatTime(ms: number): string {

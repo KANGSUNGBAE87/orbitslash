@@ -1,7 +1,11 @@
 {
-  "small_meteor":   { "startRadius": 900, "approachSpeed": 70, "angularSpeed": 0.6,  "radiusPx": 57,  "hp": 1, "damage": 3,  "score": 50,  "directional": false },
-  "basic_meteor":   { "startRadius": 920, "approachSpeed": 60, "angularSpeed": 0.5,  "radiusPx": 75,  "hp": 1, "damage": 5,  "score": 100, "directional": false },
-  "fast_comet":     { "startRadius": 950, "approachSpeed": 95, "angularSpeed": 0.7,  "radiusPx": 66,  "hp": 1, "damage": 8,  "score": 130, "directional": false },
-  "directional_comet": { "startRadius": 960, "approachSpeed": 92, "angularSpeed": 0.78, "radiusPx": 68, "hp": 1, "damage": 8, "score": 150, "directional": true, "directionalToleranceDeg": 30 },
-  "heavy_asteroid": { "startRadius": 880, "approachSpeed": 40, "angularSpeed": 0.35, "radiusPx": 128, "hp": 3, "damage": 12, "score": 180, "directional": false }
+  "shard_meteor":   { "startRadius": 900, "approachSpeed": 82, "angularSpeed": 0.68, "radiusPx": 64,  "hp": 1,  "damage": 2,  "score": 35,   "directional": false },
+  "small_meteor":   { "startRadius": 900, "approachSpeed": 72, "angularSpeed": 0.60, "radiusPx": 86,  "hp": 3,  "damage": 3,  "score": 60,   "directional": false },
+  "basic_meteor":   { "startRadius": 920, "approachSpeed": 62, "angularSpeed": 0.50, "radiusPx": 113, "hp": 5,  "damage": 5,  "score": 110,  "directional": false },
+  "fast_comet":     { "startRadius": 950, "approachSpeed": 96, "angularSpeed": 0.70, "radiusPx": 99,  "hp": 7,  "damage": 8,  "score": 145,  "directional": false },
+  "iron_planet":    { "startRadius": 920, "approachSpeed": 52, "angularSpeed": 0.42, "radiusPx": 132, "hp": 9,  "damage": 9,  "score": 175,  "directional": false },
+  "directional_comet": { "startRadius": 960, "approachSpeed": 92, "angularSpeed": 0.78, "radiusPx": 102, "hp": 11, "damage": 8, "score": 210, "directional": true, "directionalToleranceDeg": 30 },
+  "heavy_asteroid": { "startRadius": 880, "approachSpeed": 42, "angularSpeed": 0.35, "radiusPx": 192, "hp": 13, "damage": 12, "score": 240,  "directional": false },
+  "ancient_planet": { "startRadius": 900, "approachSpeed": 34, "angularSpeed": 0.28, "radiusPx": 220, "hp": 15, "damage": 16, "score": 300,  "directional": false },
+  "eclipse_core":   { "startRadius": 980, "approachSpeed": 24, "angularSpeed": 0.18, "radiusPx": 340, "hp": 50, "damage": 20, "score": 1600, "directional": false, "boss": true, "ignoreSpeedScale": true }
 }

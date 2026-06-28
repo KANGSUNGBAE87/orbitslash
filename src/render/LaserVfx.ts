@@ -1,4 +1,5 @@
 import { Container, Graphics } from "pixi.js";
+import { SOLAR_LANCE_VFX_WIDTH_PX } from "../game/input-tuning";
 import type { Segment } from "../game/types";
 import { LAYER } from "../game/layers";
 
@@ -36,9 +37,9 @@ export class LaserVfx {
     for (const b of this.beams) {
       const a = 1 - b.age / BEAM_LIFE_MS;
       const { a: p0, b: p1 } = b.seg;
-      this.g.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).stroke({ width: 22, color: 0xff9a2e, alpha: a * 0.35, cap: "round" });
-      this.g.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).stroke({ width: 10, color: 0xffc14d, alpha: a * 0.7, cap: "round" });
-      this.g.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).stroke({ width: 3, color: 0xffffff, alpha: a, cap: "round" });
+      this.g.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).stroke({ width: SOLAR_LANCE_VFX_WIDTH_PX, color: 0xff9a2e, alpha: a * 0.16, cap: "round" });
+      this.g.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).stroke({ width: SOLAR_LANCE_VFX_WIDTH_PX * 0.45, color: 0xffc14d, alpha: a * 0.34, cap: "round" });
+      this.g.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).stroke({ width: 18, color: 0xffffff, alpha: a * 0.92, cap: "round" });
     }
   }
 }

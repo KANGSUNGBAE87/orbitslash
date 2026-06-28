@@ -9,26 +9,37 @@ export interface EnemyVisualStyle {
   rim: number;
   accent: number;
   directionalGuide: boolean;
+  crackColor: number;
+  sparkleColor: number;
+  boss?: boolean;
 }
 
 const ASSETS: Record<string, string> = {
+  shard_meteor: "./assets/enemies/shard-meteor.svg",
   small_meteor: "./assets/enemies/small-meteor.svg",
   basic_meteor: "./assets/enemies/basic-meteor.svg",
   fast_comet: "./assets/enemies/fast-comet.svg",
+  iron_planet: "./assets/enemies/iron-planet.svg",
   directional_comet: "./assets/enemies/directional-comet.svg",
   heavy_asteroid: "./assets/enemies/heavy-asteroid.svg",
+  ancient_planet: "./assets/enemies/ancient-planet.svg",
+  eclipse_core: "./assets/enemies/eclipse-core.png",
 };
 
 const STYLES: Record<string, EnemyVisualStyle> = {
-  small_meteor: { shape: "meteor", fill: 0x8a8f9c, rim: 0xff8a3d, accent: 0xffffff, directionalGuide: false },
-  basic_meteor: { shape: "meteor", fill: 0x7c8493, rim: 0xff7a2e, accent: 0xffffff, directionalGuide: false },
-  fast_comet: { shape: "comet", fill: 0xffae5c, rim: 0xff5a2e, accent: 0xffe0b0, directionalGuide: false },
-  directional_comet: { shape: "comet", fill: 0x5bc7ff, rim: 0xffc14d, accent: 0x8ff3ff, directionalGuide: true },
-  heavy_asteroid: { shape: "asteroid", fill: 0x6b7280, rim: 0xff6b2e, accent: 0xd1d5db, directionalGuide: false },
+  shard_meteor: { shape: "meteor", fill: 0x9ca3af, rim: 0xffb86b, accent: 0xffffff, directionalGuide: false, crackColor: 0xf8fafc, sparkleColor: 0xffb86b },
+  small_meteor: { shape: "meteor", fill: 0x8a8f9c, rim: 0xff8a3d, accent: 0xffffff, directionalGuide: false, crackColor: 0xfef3c7, sparkleColor: 0xff8a3d },
+  basic_meteor: { shape: "meteor", fill: 0x7c8493, rim: 0xff7a2e, accent: 0xffffff, directionalGuide: false, crackColor: 0xfef3c7, sparkleColor: 0xff7a2e },
+  fast_comet: { shape: "comet", fill: 0xffae5c, rim: 0xff5a2e, accent: 0xffe0b0, directionalGuide: false, crackColor: 0xfff7ed, sparkleColor: 0xff5a2e },
+  iron_planet: { shape: "asteroid", fill: 0x64748b, rim: 0x93c5fd, accent: 0xdbeafe, directionalGuide: false, crackColor: 0x93c5fd, sparkleColor: 0xdbeafe },
+  directional_comet: { shape: "comet", fill: 0x5bc7ff, rim: 0xffc14d, accent: 0x8ff3ff, directionalGuide: true, crackColor: 0x8ff3ff, sparkleColor: 0xffc14d },
+  heavy_asteroid: { shape: "asteroid", fill: 0x6b7280, rim: 0xff6b2e, accent: 0xd1d5db, directionalGuide: false, crackColor: 0xfef3c7, sparkleColor: 0xff6b2e },
+  ancient_planet: { shape: "asteroid", fill: 0x4c1d95, rim: 0xfbbf24, accent: 0xfef3c7, directionalGuide: false, crackColor: 0xfef3c7, sparkleColor: 0xfbbf24 },
+  eclipse_core: { shape: "asteroid", fill: 0x111827, rim: 0xf59e0b, accent: 0xfef3c7, directionalGuide: false, crackColor: 0xff5a2e, sparkleColor: 0xffc14d, boss: true },
 };
 
 export function enemyVisualStyle(type: string): EnemyVisualStyle {
-  return STYLES[type] ?? { shape: "meteor", fill: 0x8a8f9c, rim: 0xff7a2e, accent: 0xffffff, directionalGuide: false };
+  return STYLES[type] ?? { shape: "meteor", fill: 0x8a8f9c, rim: 0xff7a2e, accent: 0xffffff, directionalGuide: false, crackColor: 0xfef3c7, sparkleColor: 0xff7a2e };
 }
 
 export function enemyAssetUrl(type: string): string {

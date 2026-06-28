@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { safeStartAngleRad, WaveGenerator } from "./WaveGenerator";
+import { safeStartAngleRad, TOP_HUD_SAFE_Y, waveHudState, WaveGenerator } from "./WaveGenerator";
 import { createRng } from "./Rng";
 import enemiesJson from "../data/enemies.json";
 import difficultyJson from "../data/difficulty.json";
@@ -106,11 +106,102 @@ describe("WaveGenerator 결정성 (랭킹 재현 보장의 핵심)", () => {
     }
   });
 
+  it("uses 10-second wave gauge timing", () => {
+    expect(waveHudState(0)).toMatchObject({ waveNumber: 1, progressRatio: 0, nextWaveInMs: 10000 });
+    expect(waveHudState(9999)).toMatchObject({ waveNumber: 1, nextWaveInMs: 1 });
+    expect(waveHudState(10000)).toMatchObject({ waveNumber: 2, progressRatio: 0, nextWaveInMs: 10000 });
+    expect(waveHudState(65000)).toMatchObject({ waveNumber: 7, progressRatio: 0.5, nextWaveInMs: 5000 });
+  });
+
+  it("boss spawns every 60 seconds without stopping normal spawns", () => {
+    const gen = new WaveGenerator(
+      createRng(44),
+      { difficulty: "rookie", bossEveryMs: 60000, bossEnemyType: "eclipse_core" },
+      enemies,
+      difficulty,
+      orbits,
+      waves,
+    );
+
+    const specs = gen.next(61000);
+    const boss = specs.filter((s) => s.enemyType === "eclipse_core");
+    const normal = specs.filter((s) => s.enemyType !== "eclipse_core" && s.spawnAtMs >= 59000);
+
+    expect(boss).toHaveLength(1);
+    expect(boss[0]?.spawnAtMs).toBe(60000);
+    expect(normal.length).toBeGreaterThan(0);
+  });
+
+  it("boss schedule repeats and stays deterministic across split calls", () => {
+    const once = new WaveGenerator(
+      createRng(77),
+      { difficulty: "rookie", bossEveryMs: 60000, bossEnemyType: "eclipse_core" },
+      enemies,
+      difficulty,
+      orbits,
+      waves,
+    );
+    const split = new WaveGenerator(
+      createRng(77),
+      { difficulty: "rookie", bossEveryMs: 60000, bossEnemyType: "eclipse_core" },
+      enemies,
+      difficulty,
+      orbits,
+      waves,
+    );
+
+    const allAtOnce = once.next(121000);
+    const splitCalls = [...split.next(59000), ...split.next(61000), ...split.next(121000)];
+
+    expect(splitCalls).toEqual(allAtOnce);
+    expect(allAtOnce.filter((s) => s.enemyType === "eclipse_core").map((s) => s.spawnAtMs)).toEqual([60000, 120000]);
+  });
+
+  it("wave speed scales normal enemies but not the boss", () => {
+    const testWaves: WaveTable = {
+      rookie: [
+        { fromMs: 0, spawnIntervalMs: 1, approachSpeedMul: 3, weights: { shard_meteor: 1 } },
+      ],
+    };
+    const gen = new WaveGenerator(
+      createRng(2),
+      { difficulty: "rookie", bossEveryMs: 60000, bossEnemyType: "eclipse_core" },
+      enemies,
+      difficulty,
+      orbits,
+      testWaves,
+    );
+
+    const specs = gen.next(60000);
+    const normal = specs.find((s) => s.enemyType === "shard_meteor");
+    const boss = specs.find((s) => s.enemyType === "eclipse_core");
+
+    expect(normal?.approachSpeed).toBe(enemies.shard_meteor!.approachSpeed * 3);
+    expect(boss?.approachSpeed).toBe(enemies.eclipse_core!.approachSpeed);
+  });
+
   it("keeps initial spawn positions out of the top HUD band", () => {
     const angle = (Math.PI * 3) / 2;
-    const safe = safeStartAngleRad(angle, 900, { earthY: 900, minY: 230 });
+    const safe = safeStartAngleRad(angle, 900, { earthY: 900, minY: TOP_HUD_SAFE_Y });
     const y = 900 + Math.sin(safe) * 900;
 
-    expect(y).toBeGreaterThanOrEqual(230);
+    expect(y).toBeGreaterThanOrEqual(TOP_HUD_SAFE_Y);
+  });
+
+  it("keeps large spawned enemy bounds below the top HUD clearance", () => {
+    const gen = new WaveGenerator(
+      createRng(104),
+      { difficulty: "rookie", bossEveryMs: 60000, bossEnemyType: "eclipse_core" },
+      enemies,
+      difficulty,
+      orbits,
+      waves,
+    );
+
+    for (const spawn of gen.next(61000)) {
+      const def = enemies[spawn.enemyType]!;
+      const centerY = 900 + Math.sin(spawn.startAngleRad) * spawn.startRadius;
+      expect(centerY - def.radiusPx * 0.7).toBeGreaterThanOrEqual(TOP_HUD_SAFE_Y - 0.0001);
+    }
   });
 });

@@ -749,3 +749,245 @@ Verification:
 
 Next steps:
 1. Continue implementation from `ai/reviews/review.md`, starting with directional enemy frequency tuning unless Owner chooses a different item.
+
+---
+
+## 2026-06-28 22:47 KST — Enemy Size and HP Retune
+
+User request:
+- Apply the recommended enemy retune because planets still feel too small and one-cut kills are too fast.
+- Confirm whether orbit rotation directions are mixed and what the current maximum hit count is.
+
+Decisions:
+- Increased enemy visual/slash `radiusPx` by roughly 1.5x from the current data.
+- Kept Earth impact radius behavior separate; this change affects visible enemy size and slash/touch hit feel, not Earth collision size.
+- Raised HP from mostly one-cut values to tiered values:
+  - `small_meteor`: 2
+  - `basic_meteor`: 4
+  - `fast_comet`: 4
+  - `directional_comet`: 6
+  - `heavy_asteroid`: 8
+- Added a data-level balance test so the new mobile touch-feel and HP contract cannot silently regress.
+- Verified orbit profiles are still mixed: 5 `dir: 1` and 5 `dir: -1`.
+
+Files changed:
+- `src/data/enemies.json`
+- `src/game/EnemyBalance.test.ts`
+
+Verification:
+- RED check passed before implementation: `npm test -- src/game/EnemyBalance.test.ts` failed on old radius/HP values.
+- Targeted test passed after implementation: `npm test -- src/game/EnemyBalance.test.ts`.
+- Full regression passed: `npm test` passed, 29 files / 156 tests.
+- Build passed: `npm run build`.
+- cmm project index refreshed with `index_repository` fast mode.
+
+Remaining risks:
+- Real-device feel may now shift from "too easy to kill" toward "too much HP" because scoring and gauge gain still primarily happen on kill.
+- Solar Lance currently deals multi-damage, so it may still erase some high-HP enemies faster than ordinary slashes. This is probably desirable, but needs touch QA after the retune.
+- Larger visual/slash radius can make dense waves feel more forgiving; wave density and scoring may need the next balance pass.
+
+Next steps:
+1. Real-phone QA for new enemy size, heavy HP pacing, directional comet 6-hit feel, and Solar Lance value.
+2. If kills feel too slow, tune score/gauge feedback or add stronger non-lethal crack/flash feedback before lowering HP.
+3. Next implementation candidate: score/gauge reward scaling for high-HP enemies, then wave density shaping.
+
+---
+
+## 2026-06-28 23:14 KST — Wave Gauge, 8-Tier Enemies, Boss Scaffold, and Skill HUD
+
+User request:
+- Use subagents and implement all feasible items from the current gameplay queue.
+- Add a wave gauge and make waves progress every 10 seconds.
+- Add all feasible work from Solar Lance strengthening, 8 enemy tiers, top 5-slot skill HUD, high-HP feedback, boss scaffold, and wave/difficulty shaping.
+- Boss should appear every 60 seconds with fixed speed and should not stop normal planets from spawning.
+- Assets can be added later; implement with current/procedural assets for now.
+
+Subagents:
+- `game-logic-reviewer` reviewed balance risks. Adopted: 8-tier data, 10-second wave cadence, 60-second independent boss cadence, fixed boss speed, kill-reward gauge scaling, first boss as scaffold rather than final weak-point boss. Adjusted from earlier 60HP idea to a safer 24HP first boss.
+- `ui-fixer` reviewed HUD layout. Adopted: two-row top HUD, large 5-slot row, slot orb diameter near Earth visual size, ready pulse/shine, and wave gauge under the skill row.
+- `reviewer` final diff review was requested after implementation.
+
+Decisions:
+- Added 8 normal enemy tiers with HP `1/3/5/7/9/11/13/15`:
+  - `shard_meteor`, `small_meteor`, `basic_meteor`, `fast_comet`, `iron_planet`, `directional_comet`, `heavy_asteroid`, `ancient_planet`.
+- Added first boss scaffold `eclipse_core`:
+  - `hp=24`, `damage=20`, `score=1200`, `radiusPx=260`, `approachSpeed=24`.
+  - `boss=true`, `ignoreSpeedScale=true`.
+- Wave bands now advance every 10 seconds and include increasing spawn speed and enemy mix.
+- Boss spawns every 60 seconds through `WaveGenerator` independently from normal spawns.
+- Solar Lance:
+  - `hitDamage` raised from 3 to 5.
+  - hit inflate now uses Earth visual diameter.
+  - VFX width now uses Earth visual diameter x2.
+- Replaced the tiny top cooldown strip / bottom single skill button with a large top 5-slot skill HUD.
+- Added wave gauge below the skill row.
+- Added enemy `maxHp` and crack/flash overlay so high-HP non-lethal hits are visible.
+- New enemy visual types reuse existing SVG assets for now and differentiate via procedural style/overlay.
+
+Files changed:
+- `ai/reviews/review.md`
+- `src/data/enemies.json`
+- `src/data/scoring.json`
+- `src/data/skills.json`
+- `src/data/waves.json`
+- `src/game/Enemy.ts`
+- `src/game/GameScene.ts`
+- `src/game/ScoringSystem.test.ts`
+- `src/game/SkillCooldownSlots.ts`
+- `src/game/SkillCooldownSlots.test.ts`
+- `src/game/WaveGenerator.ts`
+- `src/game/WaveGenerator.test.ts`
+- `src/game/input-tuning.ts`
+- `src/game/types.ts`
+- `src/i18n/en.json`
+- `src/i18n/ko.json`
+- `src/render/EnemyVisual.ts`
+- `src/render/Hud.ts`
+- `src/render/LaserVfx.ts`
+- `src/game/EnemyBalance.test.ts`
+- `src/game/SolarLanceBalance.test.ts`
+- `src/render/HudLayout.test.ts`
+
+Verification:
+- RED check passed before implementation for new enemy tiers, wave HUD helper, boss cadence, Solar Lance range, and top HUD layout.
+- Targeted tests passed: `npm test -- src/game/EnemyBalance.test.ts src/game/WaveGenerator.test.ts src/game/SolarLanceBalance.test.ts src/render/HudLayout.test.ts src/game/SkillCooldownSlots.test.ts`.
+- Full regression passed: `npm test` passed, 31 files / 164 tests.
+- Build passed: `npm run build`.
+
+Remaining risks:
+- Real-device QA is required for 8-tier HP pacing, especially `11/13/15` HP enemies.
+- First boss is a whole-body scaffold, not final weak-point/multi-part boss behavior.
+- Boss slow resistance is not implemented; Gravity Slow currently affects global movement.
+- Non-lethal hit rewards remain kill-centered. If high-HP enemies feel slow, chip score/gauge may be needed later.
+- Top HUD safe-area/notch handling was not added in this batch; current layout uses base-coordinate spawn safety and needs mobile QA.
+- Real boss/additional tier art assets are still deferred.
+
+Next steps:
+1. Real-phone QA for top 5-slot HUD readability, wave gauge, 60-second boss arrival, Solar Lance width, and 8-tier pacing.
+2. If HP pacing feels slow, add chip reward or reduce late-tier HP before adding deeper boss systems.
+3. If boss scaffold feels good, implement weak points / multi-part boss behavior and final boss assets.
+
+### Reviewer Follow-Up
+
+Subagent review findings fixed after the first implementation pass:
+- Boss/normal spawn determinism: `WaveGenerator.next()` now emits normal and boss spawns in chronological order, so one long call and split frame calls produce the same seeded sequence.
+- Top HUD spawn safety: large enemies now use a radius-aware top safe band so 260px-class boss/large planets do not start under the wave/skill HUD.
+- HUD localization: cooldown/wave seconds text now uses i18n labels instead of hard-coded `s`.
+- Regression coverage: added/expanded tests for repeated boss schedule, boss fixed speed, large-enemy top safe bounds, Solar Lance range/VFX width/damage, and 5-slot HUD layout.
+
+Verification after reviewer fixes:
+- Targeted: `npm test -- src/game/WaveGenerator.test.ts src/game/SolarLanceBalance.test.ts src/render/HudLayout.test.ts` passed, 18 tests.
+- Full regression: `npm test` passed, 31 files / 167 tests.
+- Build: `npm run build` passed.
+- Release boundary: `npm run preflight:release-boundary` passed.
+
+Still not implemented:
+- Final boss weak points / multi-part boss behavior. Reason: the current request can be satisfied with a first boss scaffold, while weak points need separate gameplay rules, VFX, scoring, and QA acceptance.
+- Final boss/enemy art assets. Reason: Owner said assets will be added later, so this batch only prepared/reused visual boundaries.
+- Boss-specific Gravity Slow resistance. Reason: not explicitly requested in this batch and it changes skill balance; left as a tuning follow-up after phone QA.
+
+---
+
+## 2026-06-28 Late KST — Enemy Asset Pass and 50-Hit Boss Image
+
+User request:
+- Use the provided image as the first boss planet.
+- Apply images to all remaining enemy tiers; create missing assets where needed.
+- Preserve/strengthen crack and sparkle hit readability.
+- Use subagents for implementation support.
+
+Subagents:
+- `ui-fixer` read-only asset review:
+  - Recommended `shard-meteor.svg`, `iron-planet.svg`, `ancient-planet.svg`, and `eclipse-core.png`.
+  - Recommended keeping crack/sparkle as runtime overlays rather than baking all damage states into assets.
+  - Warned against excessive detail for small enemies.
+- `game-logic-reviewer` read-only balance review:
+  - `hp=50` is acceptable for scaffold boss.
+  - `radiusPx=340` is acceptable as a temporary upper bound, but it increases hit generosity more than difficulty.
+  - Immediate follow-up should be boss HP/remaining-hit UI, boss arrival warning, and stronger non-lethal feedback.
+
+Decisions:
+- First boss `eclipse_core` now uses the user-provided image, processed into a 1024x1024 transparent PNG.
+- All 8 normal enemy tiers plus the boss now have unique asset URLs.
+- Missing assets were created as repo-native SVGs:
+  - `shard-meteor.svg`: sharp broken shard meteor.
+  - `iron-planet.svg`: metal-panel planet with blue rim.
+  - `ancient-planet.svg`: purple/gold relic planet.
+- Boss scaffold changed from `hp=24`, `radiusPx=260` to `hp=50`, `radiusPx=340`.
+- Type-colored crack/sparkle tokens were added and used by runtime hit overlays.
+
+Files changed:
+- `public/assets/enemies/shard-meteor.svg`
+- `public/assets/enemies/iron-planet.svg`
+- `public/assets/enemies/ancient-planet.svg`
+- `public/assets/enemies/eclipse-core.png`
+- `src/data/enemies.json`
+- `src/render/EnemyVisual.ts`
+- `src/render/EnemyVisual.test.ts`
+- `src/game/GameScene.ts`
+- `src/game/EnemyBalance.test.ts`
+- `ai/reviews/review.md`
+- `ai/session-logs/2026-06-28-phase1-qa-fixes-codex.md`
+
+Verification:
+- TDD RED:
+  - `npm test -- src/game/EnemyBalance.test.ts src/render/EnemyVisual.test.ts` failed on old boss HP, reused asset URLs, and missing crack/sparkle tokens.
+- Targeted GREEN:
+  - `npm test -- src/game/EnemyBalance.test.ts src/render/EnemyVisual.test.ts` passed, 7 tests.
+- Full regression:
+  - `npm test` passed, 31 files / 168 tests.
+- Build:
+  - `npm run build` passed.
+- Release boundary:
+  - `npm run preflight:release-boundary` passed.
+- Asset validation:
+  - `eclipse-core.png` alpha corners are transparent, alpha bbox is inside the canvas, and dist copy includes all 9 enemy assets.
+- Browser smoke:
+  - Clean dev server `http://127.0.0.1:5179/?seed=1234&qaPreset=dense&qaGauge=100`.
+  - Mobile viewport canvas rendered `390x844`.
+  - All 9 enemy assets returned 200 with image content types.
+  - No page errors or request failures.
+
+Remaining risks:
+- `5174` had multiple Vite processes and served asset URLs as HTML fallback. Use clean port `5179` for this session's local QA unless old servers are cleaned up.
+- 50-hit boss still lacks a boss HP bar / remaining-hit display.
+- Boss arrival warning/banner is still missing.
+- Boss special ranges, weak points, and real patterns are deferred by user decision.
+- Large `radiusPx=340` makes the boss easier to hit; QA should confirm it feels like a boss rather than a huge sponge.
+
+Next steps:
+1. Add boss arrival warning and boss HP/remaining-hit indicator.
+2. Then tune 7-second waves and Solar Lance charge access.
+3. Then implement real boss pattern or Orbital Cut, depending on the next gameplay priority.
+
+---
+
+## 2026-06-29 00:28 KST — Live Slash Immediate Rewards
+
+User request:
+- Continuous drawing should still charge Solar Lance. If the player keeps dragging and kills enemies, the gauge should rise at kill time instead of waiting until the finger is lifted.
+
+Decision:
+- Keep hit detection live on `pointermove`.
+- Commit kill rewards immediately for live slash kills by calling `commitKills(kills, earth, true)` inside `resolveLiveSlashSegment`.
+- Do not wait for pointer release to award score/gauge for those kills.
+- Keep `strokeKills` empty for live-committed kills so pointer release does not double-count them.
+- Existing combo timeout remains the combo chain gate; this change only fixes reward timing.
+
+Files changed:
+- `src/game/GameScene.ts`
+- `src/game/GameSceneLiveRewards.test.ts`
+- `ai/reviews/review.md`
+- `ai/session-logs/2026-06-28-phase1-qa-fixes-codex.md`
+
+Verification:
+- TDD RED: `npm test -- src/game/GameSceneLiveRewards.test.ts` failed before implementation because `commitKills` was not called during live slash kill resolution.
+- Targeted GREEN: `npm test -- src/game/GameSceneLiveRewards.test.ts` passed.
+- Full regression: `npm test` passed, 32 files / 169 tests.
+- Build: `npm run build` passed.
+- Release boundary: `npm run preflight:release-boundary` passed.
+- Production bundle string check: no `qaPreset` / `qaGauge` strings found in `dist`.
+
+Remaining risks:
+- Physical-device QA should confirm the gauge rise is visible enough while the finger is still moving.
+- Boss HP/remaining-hit UI and boss arrival warning remain next gameplay readability work.

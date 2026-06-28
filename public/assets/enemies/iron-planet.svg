@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="iron planet">
+  <defs>
+    <radialGradient id="ironPlanetBody" cx="36%" cy="28%" r="72%">
+      <stop offset="0%" stop-color="#cbd5e1"/>
+      <stop offset="42%" stop-color="#64748b"/>
+      <stop offset="100%" stop-color="#1f2937"/>
+    </radialGradient>
+    <linearGradient id="ironPlanetRim" x1="12%" y1="18%" x2="88%" y2="86%">
+      <stop offset="0%" stop-color="#bfdbfe"/>
+      <stop offset="50%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <filter id="ironPlanetGlow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <circle cx="128" cy="128" r="95" fill="url(#ironPlanetBody)" stroke="url(#ironPlanetRim)" stroke-width="8"/>
+  <path d="M54 120c35-28 102-31 151-6M63 167c42 16 92 19 139-4M88 45c18 41 15 114-6 160M153 37c-19 47-14 116 13 177" fill="none" stroke="#cbd5e1" stroke-opacity=".26" stroke-width="8" stroke-linecap="round"/>
+  <path d="M59 93 91 64l45 23-28 35ZM145 74l50 22 1 49-45-20ZM83 149l49-18 42 34-32 37-52-10Z" fill="#334155" fill-opacity=".5" stroke="#94a3b8" stroke-opacity=".5" stroke-width="4" stroke-linejoin="round"/>
+  <circle cx="91" cy="76" r="8" fill="#dbeafe" opacity=".35"/>
+  <circle cx="177" cy="109" r="7" fill="#dbeafe" opacity=".3"/>
+  <circle cx="132" cy="177" r="9" fill="#dbeafe" opacity=".22"/>
+  <path d="M203 81c18 13 30 32 35 54" stroke="#93c5fd" stroke-width="6" stroke-linecap="round" filter="url(#ironPlanetGlow)" opacity=".78"/>
+</svg>
