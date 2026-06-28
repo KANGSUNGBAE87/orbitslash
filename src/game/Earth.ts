@@ -3,6 +3,7 @@ import {
   EARTH_CENTER_X,
   EARTH_CENTER_Y,
   EARTH_BODY_RADIUS,
+  EARTH_GAMEPLAY_RADIUS,
   EARTH_SHIELD_RADIUS,
   LAST_SAVE_RING_RADIUS,
 } from "./coords";
@@ -113,7 +114,7 @@ export class Earth {
 
   /** 충돌 판정용 지구 기준 (중심/반지름 R). */
   ref(): EarthRef {
-    return { cx: EARTH_CENTER_X, cy: EARTH_CENTER_Y, r: EARTH_BODY_RADIUS };
+    return { cx: EARTH_CENTER_X, cy: EARTH_CENTER_Y, r: EARTH_GAMEPLAY_RADIUS };
   }
 
   /** 느린 지구 회전 + 경고 펄스 (design §11). dtMs 단위. */

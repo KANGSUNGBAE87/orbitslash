@@ -5,15 +5,15 @@ import type { DistanceBand, ZoneTable } from "./types";
 export const BASE_WIDTH = 1080;
 export const BASE_HEIGHT = 1920;
 
-// 게임 화면 지구 기준 좌표 (design §2.3 v1.2). Owner 지시(2026-06-28)로 기존 1/3 축소.
-// body 100px = radius 50. 더 넓은 플레이 공간 확보.
+// 게임 화면 지구 기준 좌표 (design §2.3 v1.2). Owner 지시(2026-06-28)로 1.3x 시각 확대.
 export const EARTH_CENTER_X = 540;
 export const EARTH_CENTER_Y = 900;
-export const EARTH_BODY_DIAMETER = 100; // 기존 300의 1/3 (design §2.2 v1.2 갱신)
-export const EARTH_BODY_RADIUS = EARTH_BODY_DIAMETER / 2; // 50 = R
-export const EARTH_SHIELD_DIAMETER = 140;
+export const EARTH_BODY_DIAMETER = 130;
+export const EARTH_BODY_RADIUS = EARTH_BODY_DIAMETER / 2;
+export const EARTH_GAMEPLAY_RADIUS = 58; // 기존 R=50의 약 1.16x. 거리밴드/충돌 기준은 시각보다 작게 유지.
+export const EARTH_SHIELD_DIAMETER = 182;
 export const EARTH_SHIELD_RADIUS = EARTH_SHIELD_DIAMETER / 2;
-export const LAST_SAVE_RING_DIAMETER = 174;
+export const LAST_SAVE_RING_DIAMETER = 226;
 export const LAST_SAVE_RING_RADIUS = LAST_SAVE_RING_DIAMETER / 2;
 
 /** 반응형 스케일 = min(sw/BASE_W, sh/BASE_H). design §3. */

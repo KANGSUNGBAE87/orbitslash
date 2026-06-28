@@ -257,3 +257,77 @@ Not yet. Project-local implementation/QA state only.
 ### Promote to 지식저장소?
 
 Not yet. Project-local release evidence only.
+
+---
+
+## Continuation — Realtime Slash Judgement Tuning
+
+- Date: 2026-06-28 16:27 KST
+- Actor: codex
+- Stage: implementation + qa
+
+### User Request
+
+사용자가 이전 touch-feel/판정 의견을 바탕으로 서브에이전트를 활용해 구현하고 GitHub에 배포해 달라고 요청.
+
+### Subagents
+
+- `game-logic-reviewer`: 일반 slash는 `pointermove` recent segment, Solar Lance는 release-time recognizer, 같은 stroke 중복 적중 금지, Earth visual/gameplay radius 분리, 상단 cooldown strip을 권장.
+- `reviewer`: move-time hit와 pointer-up 배치 판정 중복, tap-only guard, per-stroke score/gauge semantics, HUD single-skill hardcoding 리스크를 체크리스트로 제시.
+
+### Files Changed
+
+- `src/game/CollisionSystem.ts`
+  - `resolveLiveSegmentHits` 추가.
+  - 일반 slash 전용 inflated hit radius와 same-stroke dedupe 지원.
+- `src/game/GameScene.ts`
+  - 일반 slash를 `pointermove` recent segment hit로 전환.
+  - 킬 피드백은 즉시 보여주고, score/gauge/multi-cut은 stroke release 때 묶음 정산.
+  - Solar Lance는 release-time 판정으로 유지하고, 일반 slash hit가 이미 있는 stroke에서는 발동하지 않도록 배타 처리.
+  - Solar Lance 후보처럼 보이는 직선/지구관통 stroke는 move-time 일반 slash 판정을 보류.
+- `src/game/gesture-helpers.ts`, `src/game/GestureSystem.ts`, `src/game/input-tuning.ts`
+  - path length 계산, stroke length cap, touch tuning constants 추가.
+- `src/game/coords.ts`, `src/game/Earth.ts`
+  - Earth visual radius 1.3x 적용.
+  - gameplay radius는 visual보다 작게 분리해 distance band/impact/Solar Lance 기준이 과하게 커지지 않게 조정.
+- `src/data/enemies.json`, `src/data/skills.json`
+  - 적 placeholder 크기 확대.
+  - Solar Lance straightness threshold를 `0.90`으로 조정.
+- `src/render/Hud.ts`
+  - 하단 Solar Lance 버튼의 cooldown 숫자 표시를 제거.
+  - 상단에 future skill slots용 cooldown strip 추가.
+- Tests:
+  - `CollisionSystem.test.ts`: live segment hit, tap/short move guard, same-stroke dedupe.
+  - `gesture-helpers.test.ts`: path length and stroke trimming.
+
+### Verification
+
+- TDD RED:
+  - `npm test -- src/game/CollisionSystem.test.ts src/game/gesture-helpers.test.ts` failed before implementation because `resolveLiveSegmentHits`, `pathLength`, and `trimPathToMaxLength` did not exist.
+- GREEN and regression:
+  - `npm test -- src/game/CollisionSystem.test.ts src/game/gesture-helpers.test.ts` passed: 49 tests.
+  - `npm test` passed: 10 files, 93 tests.
+  - `npm run typecheck` passed.
+  - `npm run build` passed.
+- Local Chrome mobile smoke:
+  - Dev server: `http://127.0.0.1:5176/?seed=42&qaGauge=100`.
+  - Canvas rendered at mobile viewport `393x852`, no page errors.
+  - Normal drag smoke raised score to `130` and showed hit feedback.
+  - Long Earth-crossing drag fired Solar Lance VFX and changed gauge/cooldown UI.
+
+### Remaining Risks
+
+- Physical device touch feel is still the real acceptance gate.
+- 상단 중앙 적이 HUD 뒤를 지나가는 경우가 보였다. 이번 판정 변경 범위 밖이며 다음 HUD safe-area/spawn exclusion QA에서 다룰 후보.
+- Directional cut is not implemented in this pass. The recommended next implementation is contact segment angle with full/graze/fail.
+
+### Next Steps
+
+1. Deploy this implementation to GitHub Pages and verify the public URL.
+2. Test public build on a real phone: normal slash immediate hit, Solar Lance long line, Last Save feel.
+3. If Last Save remains hard to hit naturally, add a DEV-only deterministic near-Earth spawn harness.
+4. Implement directional cut enemies using contact segment angle.
+
+### Promote to 지식저장소?
+
+Not yet. Project-local implementation and release evidence only.

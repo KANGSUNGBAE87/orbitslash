@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { enemyTouchesImpactZone, resolveLineHits, segmentIntersectsCircle, multiCutTier } from "./CollisionSystem";
+import {
+  enemyTouchesImpactZone,
+  resolveLineHits,
+  resolveLiveSegmentHits,
+  segmentIntersectsCircle,
+  multiCutTier,
+} from "./CollisionSystem";
 import { distanceBand } from "./coords";
 import type { EnemyState, Point, Segment, ZoneTable } from "./types";
 
@@ -141,5 +147,45 @@ describe("resolveLineHits", () => {
     enemies[0]!.alive = false;
 
     expect(resolveLineHits(line, enemies, 0, 0, 50, zones)).toEqual([]);
+  });
+});
+
+describe("resolveLiveSegmentHits", () => {
+  const zones: ZoneTable = { outer: 4.0, mid: 3.0, danger: 2.0, lastSave: 1.3, impact: 1.2 };
+
+  it("탭/짧은 이동은 적에 닿아도 일반 베기로 보지 않는다", () => {
+    const enemies = [enemyAt(1, 5, 0, 20)];
+
+    expect(
+      resolveLiveSegmentHits(seg(0, 0, 8, 0), enemies, 0, 0, 50, zones, {
+        minSegmentLengthPx: 12,
+        hitRadiusInflatePx: 12,
+        alreadyHitEnemyIds: new Set(),
+      }),
+    ).toEqual([]);
+  });
+
+  it("이동 중 최근 선분이 inflated hitbox에 닿으면 즉시 hit를 반환한다", () => {
+    const enemies = [enemyAt(1, 50, 21, 10)];
+
+    expect(
+      resolveLiveSegmentHits(seg(0, 0, 100, 0), enemies, 0, 0, 50, zones, {
+        minSegmentLengthPx: 12,
+        hitRadiusInflatePx: 12,
+        alreadyHitEnemyIds: new Set(),
+      }).map((h) => h.enemyId),
+    ).toEqual([1]);
+  });
+
+  it("같은 stroke에서 이미 맞은 적은 중복 데미지 대상에서 제외한다", () => {
+    const enemies = [enemyAt(1, 50, 0, 10), enemyAt(2, 80, 0, 10)];
+
+    expect(
+      resolveLiveSegmentHits(seg(0, 0, 100, 0), enemies, 0, 0, 50, zones, {
+        minSegmentLengthPx: 12,
+        hitRadiusInflatePx: 12,
+        alreadyHitEnemyIds: new Set([1]),
+      }).map((h) => h.enemyId),
+    ).toEqual([2]);
   });
 });

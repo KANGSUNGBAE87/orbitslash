@@ -17,7 +17,17 @@ export interface HudState {
   gaugeCost: number;
   skillReady: boolean;
   cooldownMs: number;
+  skillSlots: SkillCooldownSlot[];
   timeMs: number;
+}
+
+export interface SkillCooldownSlot {
+  id: string;
+  label: string;
+  ratio: number;
+  ready: boolean;
+  cooldownMs: number;
+  active: boolean;
 }
 
 const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
@@ -29,6 +39,9 @@ function label(opts: Partial<TextStyleOptions>): TextStyle {
 const SKILL_CX = BASE_WIDTH / 2;
 const SKILL_CY = 1660;
 const SKILL_R = 78;
+const STRIP_Y = 146;
+const STRIP_SLOT_R = 23;
+const STRIP_SLOT_GAP = 16;
 
 export class Hud {
   readonly container: Container;
@@ -43,6 +56,8 @@ export class Hud {
   private skillRing: Graphics;
   private skillIcon: Graphics;
   private skillText: Text;
+  private cooldownStrip: Graphics;
+  private cooldownTexts: Text[] = [];
   private readyPulse = 0;
 
   constructor() {
@@ -77,6 +92,7 @@ export class Hud {
     // 하단 Solar Lance 스킬 버튼 (게이지 링 + 쿨타임)
     this.skillRing = new Graphics();
     this.skillIcon = new Graphics();
+    this.cooldownStrip = new Graphics();
     this.skillText = new Text({ text: t("skill.solar_lance"), style: label({ fontSize: 24, fill: 0xffc14d, align: "center" }) });
     this.skillText.anchor.set(0.5, 0);
     this.skillText.position.set(SKILL_CX, SKILL_CY + SKILL_R + 12);
@@ -87,6 +103,7 @@ export class Hud {
       this.timeText,
       this.comboText,
       this.banner,
+      this.cooldownStrip,
       this.skillRing,
       this.skillIcon,
       this.skillText,
@@ -115,6 +132,7 @@ export class Hud {
     }
 
     this.drawSkillButton(s, dtMs);
+    this.drawCooldownStrip(s.skillSlots);
   }
 
   private drawSkillButton(s: HudState, dtMs: number): void {
@@ -149,13 +167,55 @@ export class Hud {
       .circle(SKILL_CX, SKILL_CY, SKILL_R - 14)
       .stroke({ width: 2, color: 0xffc14d, alpha: ready ? 1 : 0.5 });
 
-    // 쿨타임 텍스트 (남은 초)
-    if (s.cooldownMs > 0) {
-      this.skillText.text = `${Math.ceil(s.cooldownMs / 1000)}s`;
-      this.skillText.style.fill = 0x88aacc;
-    } else {
-      this.skillText.text = t("skill.solar_lance");
-      this.skillText.style.fill = ready ? 0xffc14d : 0x88aacc;
+    this.skillText.text = t("skill.solar_lance");
+    this.skillText.style.fill = ready ? 0xffc14d : 0x88aacc;
+  }
+
+  private drawCooldownStrip(slots: SkillCooldownSlot[]): void {
+    this.ensureCooldownTexts(slots.length);
+    this.cooldownStrip.clear();
+    if (slots.length === 0) return;
+
+    const step = STRIP_SLOT_R * 2 + STRIP_SLOT_GAP;
+    const totalW = slots.length * STRIP_SLOT_R * 2 + (slots.length - 1) * STRIP_SLOT_GAP;
+    const startX = BASE_WIDTH / 2 - totalW / 2 + STRIP_SLOT_R;
+    this.cooldownStrip
+      .roundRect(BASE_WIDTH / 2 - totalW / 2 - 18, STRIP_Y - STRIP_SLOT_R - 14, totalW + 36, STRIP_SLOT_R * 2 + 28, 18)
+      .fill({ color: 0x080b16, alpha: 0.52 });
+
+    for (let i = 0; i < this.cooldownTexts.length; i++) {
+      const text = this.cooldownTexts[i]!;
+      const slot = slots[i];
+      text.visible = Boolean(slot);
+      if (!slot) continue;
+
+      const x = startX + i * step;
+      const baseColor = slot.active ? 0xffc14d : 0x334155;
+      const fillColor = slot.ready ? 0xffc14d : slot.active ? 0x1b2a44 : 0x111827;
+      this.cooldownStrip.circle(x, STRIP_Y, STRIP_SLOT_R).fill({ color: fillColor, alpha: slot.active ? 0.82 : 0.56 });
+      this.cooldownStrip.circle(x, STRIP_Y, STRIP_SLOT_R).stroke({ width: 2, color: baseColor, alpha: slot.active ? 0.9 : 0.45 });
+
+      if (slot.ratio > 0 && slot.ratio < 1) {
+        const start = -Math.PI / 2;
+        this.cooldownStrip.moveTo(x, STRIP_Y - STRIP_SLOT_R);
+        this.cooldownStrip.arc(x, STRIP_Y, STRIP_SLOT_R, start, start + slot.ratio * Math.PI * 2);
+        this.cooldownStrip.stroke({ width: 3, color: 0x3fd8ff, alpha: 0.85 });
+      }
+
+      text.text = slot.cooldownMs > 0 && slot.cooldownMs <= 3000
+        ? `${Math.ceil(slot.cooldownMs / 1000)}`
+        : slot.label.slice(0, 1).toUpperCase();
+      text.style.fill = slot.ready ? 0x111827 : slot.active ? 0xffffff : 0x94a3b8;
+      text.position.set(x, STRIP_Y);
+    }
+  }
+
+  private ensureCooldownTexts(count: number): void {
+    while (this.cooldownTexts.length < count) {
+      const txt = new Text({ text: "", style: label({ fontSize: 21, fontWeight: "bold", fill: 0xffffff, align: "center" }) });
+      txt.anchor.set(0.5);
+      this.cooldownTexts.push(txt);
+      this.container.addChild(txt);
     }
   }
 }

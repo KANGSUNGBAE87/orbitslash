@@ -1,5 +1,5 @@
 {
-  "solar_lance":  { "gaugeCost": 80,  "cooldownSec": 12, "hitDamage": 3, "minLengthRatio": 0.60, "straightnessMin": 0.88, "lineToEarthMaxR": 0.6, "endpointOutsideR": 1.5 },
+  "solar_lance":  { "gaugeCost": 80,  "cooldownSec": 12, "hitDamage": 3, "minLengthRatio": 0.60, "straightnessMin": 0.90, "lineToEarthMaxR": 0.6, "endpointOutsideR": 1.5 },
   "orbital_cut":  { "gaugeCost": 100, "cooldownSec": 18, "_phase": "later" },
   "gravity_slow": { "gaugeCost": 100, "cooldownSec": 25, "_phase": "later" },
   "delta_shield": { "gaugeCost": 100, "cooldownSec": 30, "_phase": "later" },

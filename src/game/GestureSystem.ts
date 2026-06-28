@@ -1,10 +1,12 @@
 import type { Point, GestureResult, GestureKind, EarthRef } from "./types";
 import {
   straightness,
+  trimPathToMaxLength,
   totalTurn,
   polygonEnclosesPoint,
   countSharpVertices,
 } from "./gesture-helpers";
+import { STROKE_BUFFER_HARD_CAP_PX } from "./input-tuning";
 
 // GestureSystem 클래스 셸 (implementation-plan §3.2). 순수 분류 헬퍼는 gesture-helpers.ts.
 // pointer 이벤트 누적/배선 + 슬래시 trail 렌더는 Subagent B.
@@ -30,10 +32,12 @@ export class GestureSystem implements IGestureSystem {
 
   onPointerMove(p: Point): void {
     this.points.push(p);
+    this.points = trimPathToMaxLength(this.points, STROKE_BUFFER_HARD_CAP_PX);
   }
 
   onPointerUp(p: Point, earth: EarthRef): GestureResult {
     this.points.push(p);
+    this.points = trimPathToMaxLength(this.points, STROKE_BUFFER_HARD_CAP_PX);
     const result = this.classify(this.points, earth);
     this.points = [];
     return result;

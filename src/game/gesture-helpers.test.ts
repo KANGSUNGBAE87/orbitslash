@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   straightness,
+  pathLength,
+  trimPathToMaxLength,
   totalTurn,
   polygonEnclosesPoint,
   countSharpVertices,
@@ -33,6 +35,25 @@ describe("straightness (시작-끝거리 / 경로총길이)", () => {
   it("닫힌 경로(시작=끝)면 0에 가까움", () => {
     const pts = [p(0, 0), p(10, 0), p(10, 10), p(0, 10), p(0, 0)];
     expect(straightness(pts)).toBeCloseTo(0, 1);
+  });
+});
+
+describe("pathLength / trimPathToMaxLength", () => {
+  it("경로 누적 길이를 계산한다", () => {
+    expect(pathLength([p(0, 0), p(10, 0), p(10, 10)])).toBe(20);
+  });
+
+  it("최근 stroke 구간만 남기고 max 길이 경계점은 보간한다", () => {
+    const trimmed = trimPathToMaxLength([p(0, 0), p(30, 0), p(60, 0), p(90, 0)], 50);
+
+    expect(trimmed.map((pt) => pt.x)).toEqual([40, 60, 90]);
+    expect(pathLength(trimmed)).toBe(50);
+  });
+
+  it("max 길이보다 짧으면 원본 점들을 유지한다", () => {
+    const points = [p(0, 0), p(20, 0), p(30, 0)];
+
+    expect(trimPathToMaxLength(points, 50)).toEqual(points);
   });
 });
 

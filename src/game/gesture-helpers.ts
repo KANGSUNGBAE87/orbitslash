@@ -11,7 +11,7 @@ function dist(a: Point, b: Point): number {
 }
 
 /** 경로 총 길이(누적 선분 길이). */
-function pathLength(points: Point[]): number {
+export function pathLength(points: Point[]): number {
   let len = 0;
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1];
@@ -21,9 +21,43 @@ function pathLength(points: Point[]): number {
   return len;
 }
 
+/** 최근 입력을 유지하면서 경로 길이를 maxLengthPx 이하로 자른다. */
+export function trimPathToMaxLength(points: Point[], maxLengthPx: number): Point[] {
+  if (points.length <= 1) return points;
+  if (maxLengthPx <= 0) return [points[points.length - 1]!];
+
+  const total = pathLength(points);
+  if (total <= maxLengthPx) return points;
+
+  const out: Point[] = [points[points.length - 1]!];
+  let remaining = maxLengthPx;
+  for (let i = points.length - 1; i > 0; i--) {
+    const b = points[i]!;
+    const a = points[i - 1]!;
+    const len = dist(a, b);
+    if (len === 0) continue;
+
+    if (remaining >= len) {
+      out.unshift(a);
+      remaining -= len;
+      continue;
+    }
+
+    const keepRatio = remaining / len;
+    out.unshift({
+      x: b.x + (a.x - b.x) * keepRatio,
+      y: b.y + (a.y - b.y) * keepRatio,
+      t: b.t + (a.t - b.t) * keepRatio,
+    });
+    break;
+  }
+
+  return out;
+}
+
 /**
  * 직선성 = 시작-끝 직선거리 / 경로 총 길이 (1.0 근접 = 직선).
- * Solar Lance 임계 0.88 (product-plan §9.2). 점 2개 미만이면 0.
+ * Solar Lance 임계는 skills.json에서 조정한다. 점 2개 미만이면 0.
  */
 export function straightness(points: Point[]): number {
   if (points.length < 2) return 0;

@@ -1,6 +1,6 @@
 {
-  "small_meteor":   { "startRadius": 900, "approachSpeed": 70, "angularSpeed": 0.6,  "radiusPx": 26, "hp": 1, "damage": 3,  "score": 50,  "directional": false },
-  "basic_meteor":   { "startRadius": 920, "approachSpeed": 60, "angularSpeed": 0.5,  "radiusPx": 34, "hp": 1, "damage": 5,  "score": 100, "directional": false },
-  "fast_comet":     { "startRadius": 950, "approachSpeed": 95, "angularSpeed": 0.7,  "radiusPx": 30, "hp": 1, "damage": 8,  "score": 130, "directional": false },
-  "heavy_asteroid": { "startRadius": 880, "approachSpeed": 40, "angularSpeed": 0.35, "radiusPx": 58, "hp": 3, "damage": 12, "score": 180, "directional": false }
+  "small_meteor":   { "startRadius": 900, "approachSpeed": 70, "angularSpeed": 0.6,  "radiusPx": 35, "hp": 1, "damage": 3,  "score": 50,  "directional": false },
+  "basic_meteor":   { "startRadius": 920, "approachSpeed": 60, "angularSpeed": 0.5,  "radiusPx": 44, "hp": 1, "damage": 5,  "score": 100, "directional": false },
+  "fast_comet":     { "startRadius": 950, "approachSpeed": 95, "angularSpeed": 0.7,  "radiusPx": 41, "hp": 1, "damage": 8,  "score": 130, "directional": false },
+  "heavy_asteroid": { "startRadius": 880, "approachSpeed": 40, "angularSpeed": 0.35, "radiusPx": 68, "hp": 3, "damage": 12, "score": 180, "directional": false }
 }

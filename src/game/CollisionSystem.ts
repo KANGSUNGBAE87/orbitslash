@@ -48,6 +48,26 @@ export function segmentIntersectsCircle(
   return ddx * ddx + ddy * ddy <= r * r;
 }
 
+function segmentLength(seg: Segment): number {
+  return Math.hypot(seg.b.x - seg.a.x, seg.b.y - seg.a.y);
+}
+
+function enemyPosition(enemy: EnemyState, earthCx: number, earthCy: number): { x: number; y: number } {
+  return {
+    x: earthCx + Math.cos(enemy.angle) * enemy.radius,
+    y: earthCy + Math.sin(enemy.angle) * enemy.radius,
+  };
+}
+
+interface HitRadiusOptions {
+  hitRadiusInflatePx?: number;
+}
+
+export interface LiveSegmentHitOptions extends HitRadiusOptions {
+  minSegmentLengthPx: number;
+  alreadyHitEnemyIds?: ReadonlySet<number>;
+}
+
 /** Multi Cut 등급 (product-plan §6.3): 2 double / 3 triple / 5 mega / 7+ orbital_master. */
 export function multiCutTier(count: number): MultiCutTier {
   if (count >= 7) return "orbital_master";
@@ -76,13 +96,42 @@ export function resolveLineHits(
   earthCy: number,
   earthR: number,
   zones: ZoneTable,
+  options: HitRadiusOptions = {},
 ): HitResult[] {
   const hits: HitResult[] = [];
+  const inflate = options.hitRadiusInflatePx ?? 0;
   for (const enemy of enemies) {
     if (!enemy.alive) continue;
-    const ex = earthCx + Math.cos(enemy.angle) * enemy.radius;
-    const ey = earthCy + Math.sin(enemy.angle) * enemy.radius;
-    if (segmentIntersectsCircle(line, ex, ey, enemy.radiusPx)) {
+    const pos = enemyPosition(enemy, earthCx, earthCy);
+    if (segmentIntersectsCircle(line, pos.x, pos.y, enemy.radiusPx + inflate)) {
+      hits.push({
+        enemyId: enemy.id,
+        band: distanceBand(enemy.radius, earthR, zones),
+        accuracy: "normal",
+      });
+    }
+  }
+  return hits;
+}
+
+export function resolveLiveSegmentHits(
+  segment: Segment,
+  enemies: EnemyState[],
+  earthCx: number,
+  earthCy: number,
+  earthR: number,
+  zones: ZoneTable,
+  options: LiveSegmentHitOptions,
+): HitResult[] {
+  if (segmentLength(segment) < options.minSegmentLengthPx) return [];
+
+  const hits: HitResult[] = [];
+  const inflate = options.hitRadiusInflatePx ?? 0;
+  for (const enemy of enemies) {
+    if (!enemy.alive) continue;
+    if (options.alreadyHitEnemyIds?.has(enemy.id)) continue;
+    const pos = enemyPosition(enemy, earthCx, earthCy);
+    if (segmentIntersectsCircle(segment, pos.x, pos.y, enemy.radiusPx + inflate)) {
       hits.push({
         enemyId: enemy.id,
         band: distanceBand(enemy.radius, earthR, zones),
@@ -111,14 +160,13 @@ export function resolveSlash(
 
   for (const enemy of enemies) {
     if (!enemy.alive) continue;
-    const ex = earthCx + Math.cos(enemy.angle) * enemy.radius;
-    const ey = earthCy + Math.sin(enemy.angle) * enemy.radius;
+    const pos = enemyPosition(enemy, earthCx, earthCy);
     let cut = false;
     for (let i = 1; i < points.length; i++) {
       const prev = points[i - 1];
       const cur = points[i];
       if (!prev || !cur) continue;
-      if (segmentIntersectsCircle({ a: prev, b: cur }, ex, ey, enemy.radiusPx)) {
+      if (segmentIntersectsCircle({ a: prev, b: cur }, pos.x, pos.y, enemy.radiusPx)) {
         cut = true;
         break;
       }
