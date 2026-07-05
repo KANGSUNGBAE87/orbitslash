@@ -31,6 +31,7 @@ export interface ZoneTable {
 
 /** WaveGenerator → OrbitSpawner. 렌더 무관, 서버 재현 가능. */
 export interface SpawnSpec {
+  spawnOrdinal?: number; // ranked replay용 run-local stable id
   enemyType: string; // enemies.json 키
   spawnAtMs: number; // 판 시작 기준 등장 시각
   startAngleRad: number; // 결정적 RNG로 생성
@@ -56,6 +57,7 @@ export type WaveTable = Record<string, WaveBand[]>;
 
 export interface EnemyState {
   id: number;
+  spawnOrdinal?: number;
   type: string;
   angle: number; // 나선 궤도 상태 (§15.1)
   radius: number;
@@ -71,6 +73,16 @@ export interface EnemyState {
   damage: number;
   score: number;
   boss?: boolean;
+  attribute?: EnemyDef["attribute"];
+  behavior?: EnemyDef["behavior"];
+  splitInto?: string;
+  splitCount?: number;
+  precisionBonus?: boolean;
+  shieldHits?: number;
+  empOnWrongHit?: boolean;
+  gravityPullRadiusPx?: number;
+  visibility?: EnemyDef["visibility"];
+  armorHits?: number;
   alive: boolean;
 }
 
@@ -90,6 +102,16 @@ export interface EnemyDef {
   directionalToleranceDeg?: number;
   boss?: boolean;
   ignoreSpeedScale?: boolean;
+  attribute?: "fire" | "ice" | "crystal" | "metal" | "electric" | "gravity" | "dark" | "armored";
+  behavior?: "burn" | "split" | "precision_bonus" | "shield" | "emp" | "orbit_pull" | "hidden" | "armor";
+  splitInto?: string;
+  splitCount?: number;
+  precisionBonus?: boolean;
+  shieldHits?: number;
+  empOnWrongHit?: boolean;
+  gravityPullRadiusPx?: number;
+  visibility?: "always" | "dangerOnly";
+  armorHits?: number;
 }
 export type EnemyTable = Record<string, EnemyDef>;
 
@@ -125,6 +147,10 @@ export interface SkillDef {
   gaugeCost: number;
   cooldownSec: number;
   hitDamage?: number;
+  radiusRatio?: number;
+  orbitTurnMinRad?: number;
+  triangleVertexMin?: number;
+  absorbCount?: number;
   minLengthRatio?: number;
   straightnessMin?: number;
   lineToEarthMaxR?: number;
@@ -133,6 +159,10 @@ export interface SkillDef {
   slowMultiplier?: number;
   circleTurnMinRad?: number;
   closeMaxRatio?: number;
+  startNearEarthMaxR?: number;
+  minPathLengthR?: number;
+  pushPx?: number;
+  targetCap?: number;
   _phase?: string;
 }
 export interface SkillTable {
@@ -140,7 +170,7 @@ export interface SkillTable {
   orbital_cut: SkillDef;
   gravity_slow: SkillDef;
   delta_shield: SkillDef;
-  reserve_slot: SkillDef;
+  nova_pulse: SkillDef;
   _debug: { instantFillGauge: boolean; infiniteGauge: boolean };
 }
 
@@ -152,6 +182,9 @@ export interface HitResult {
   enemyId: number;
   band: DistanceBand; // 베인 시점 적의 거리밴드 → 거리배율
   accuracy: AccuracyKind;
+  damageMultiplier?: number;
+  blocked?: boolean;
+  blockReason?: "boss_body_locked";
 }
 
 export type MultiCutTier = "double" | "triple" | "mega" | "orbital_master" | "none";

@@ -8,11 +8,8 @@ import {
 } from "./gesture-helpers";
 import { STROKE_BUFFER_HARD_CAP_PX } from "./input-tuning";
 
-// GestureSystem 클래스 셸 (implementation-plan §3.2). 순수 분류 헬퍼는 gesture-helpers.ts.
-// pointer 이벤트 누적/배선 + 슬래시 trail 렌더는 Subagent B.
-// TODO(Phase1-B): PixiJS stage pointer 이벤트(onPointerDown/Move/Up)를 이 클래스에 wiring,
-//   pointer-up에서 classify() 호출 → GameScene input 단계로 GestureResult 전달,
-//   L9 슬래시 trail 렌더. (product-plan §2.3 Instant Judgment = pointer-up 판정)
+// GestureSystem (implementation-plan §3.2). Pure gesture math lives in
+// gesture-helpers.ts; GameScene owns pointer wiring and slash trail rendering.
 
 const SHARP_VERTEX_ANGLE = Math.PI / 4; // 45도 이상 = 큰 꺾임
 

@@ -7,5 +7,17 @@
   "directional_comet": { "startRadius": 960, "approachSpeed": 92, "angularSpeed": 0.78, "radiusPx": 102, "hp": 11, "damage": 8, "score": 210, "directional": true, "directionalToleranceDeg": 30 },
   "heavy_asteroid": { "startRadius": 880, "approachSpeed": 42, "angularSpeed": 0.35, "radiusPx": 192, "hp": 13, "damage": 12, "score": 240,  "directional": false },
   "ancient_planet": { "startRadius": 900, "approachSpeed": 34, "angularSpeed": 0.28, "radiusPx": 220, "hp": 15, "damage": 16, "score": 300,  "directional": false },
-  "eclipse_core":   { "startRadius": 980, "approachSpeed": 24, "angularSpeed": 0.18, "radiusPx": 340, "hp": 50, "damage": 20, "score": 1600, "directional": false, "boss": true, "ignoreSpeedScale": true }
+  "fire_meteor": { "startRadius": 940, "approachSpeed": 74, "angularSpeed": 0.58, "radiusPx": 126, "hp": 7, "damage": 15, "score": 260, "directional": false, "attribute": "fire", "behavior": "burn" },
+  "ice_comet": { "startRadius": 960, "approachSpeed": 86, "angularSpeed": 0.66, "radiusPx": 118, "hp": 7, "damage": 7, "score": 240, "directional": false, "attribute": "ice", "behavior": "split", "splitInto": "shard_meteor", "splitCount": 3 },
+  "crystal_meteor": { "startRadius": 930, "approachSpeed": 68, "angularSpeed": 0.54, "radiusPx": 124, "hp": 9, "damage": 9, "score": 285, "directional": false, "attribute": "crystal", "behavior": "precision_bonus", "precisionBonus": true },
+  "shield_rock": { "startRadius": 910, "approachSpeed": 46, "angularSpeed": 0.38, "radiusPx": 168, "hp": 11, "damage": 13, "score": 330, "directional": false, "attribute": "metal", "behavior": "shield", "shieldHits": 2 },
+  "electric_meteor": { "startRadius": 950, "approachSpeed": 88, "angularSpeed": 0.72, "radiusPx": 122, "hp": 9, "damage": 12, "score": 310, "directional": true, "directionalToleranceDeg": 28, "attribute": "electric", "behavior": "emp", "empOnWrongHit": true },
+  "graviton_core": { "startRadius": 980, "approachSpeed": 44, "angularSpeed": 0.5, "radiusPx": 174, "hp": 13, "damage": 14, "score": 420, "directional": false, "attribute": "gravity", "behavior": "orbit_pull", "gravityPullRadiusPx": 260 },
+  "dark_meteor": { "startRadius": 930, "approachSpeed": 78, "angularSpeed": 0.64, "radiusPx": 138, "hp": 11, "damage": 14, "score": 390, "directional": false, "attribute": "dark", "behavior": "hidden", "visibility": "dangerOnly" },
+  "armored_fragment": { "startRadius": 900, "approachSpeed": 38, "angularSpeed": 0.32, "radiusPx": 210, "hp": 15, "damage": 18, "score": 460, "directional": false, "attribute": "armored", "behavior": "armor", "armorHits": 2 },
+  "eclipse_core":   { "startRadius": 980, "approachSpeed": 24, "angularSpeed": 0.18, "radiusPx": 340, "hp": 50, "damage": 20, "score": 1600, "directional": false, "boss": true, "ignoreSpeedScale": true },
+  "ringed_destroyer": { "startRadius": 1020, "approachSpeed": 22, "angularSpeed": 0.16, "radiusPx": 365, "hp": 58, "damage": 22, "score": 1900, "directional": false, "boss": true, "ignoreSpeedScale": true },
+  "lava_titan": { "startRadius": 1040, "approachSpeed": 21, "angularSpeed": 0.15, "radiusPx": 382, "hp": 66, "damage": 24, "score": 2200, "directional": false, "boss": true, "ignoreSpeedScale": true },
+  "ice_colossus": { "startRadius": 1040, "approachSpeed": 20, "angularSpeed": 0.14, "radiusPx": 392, "hp": 72, "damage": 24, "score": 2500, "directional": false, "boss": true, "ignoreSpeedScale": true },
+  "dark_planet": { "startRadius": 1060, "approachSpeed": 19, "angularSpeed": 0.12, "radiusPx": 420, "hp": 84, "damage": 28, "score": 3200, "directional": false, "boss": true, "ignoreSpeedScale": true }
 }

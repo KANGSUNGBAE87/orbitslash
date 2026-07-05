@@ -4,20 +4,28 @@
 **텍스트** 래퍼 전용이다. 텍스트·숫자는 이미지에 굽지 않고 HTML/CSS 또는 Canvas Text로
 렌더한다 (design §6).
 
-## Phase 1 상태
+## Current State
 
-Phase 1 UI는 최소다. React는 아직 추가하지 않았다 (스택은 Vite+TS+PixiJS). HUD 오버레이
-배선은 Subagent B 담당이다. 사용자 대면 문자열은 전부 `src/i18n` `t(key)`를 경유한다 —
-하드코딩 금지.
+UI는 React 없이 Vite + TypeScript + PixiJS로 유지한다. `src/render/AppShell.ts`
+owns home, mode select/detail, records, settings, collection, DEV QA, and
+result surfaces. `src/render/Hud.ts` owns the in-game HUD.
 
-## TODO(Phase1-B)
+사용자 대면 문자열은 전부 `src/i18n` `t(key)`를 경유한다. 하드코딩 금지.
 
-- HudOverlay: 점수/생존시간/에너지/Threat/콤보/Last Save 라벨 (i18n 키 사용).
-- StartScreen: 시작 버튼.
-- ResultScreen: 점수/생존시간 표시.
-- 구현 방식(React 도입 여부)은 B가 HUD 배선 시 결정. 도입 시 package.json에
-  react/react-dom + @vitejs/plugin-react 추가.
+## Implemented Screens
 
-## TODO(LATER)
+- Home / mode grid / mode detail.
+- Result with mode-specific stats and ranking submission state.
+- Records with local and public-leaderboard boundary state.
+- Collection with stored boss/special/title progress.
+- Settings with locale switching.
+- DEV QA launcher/recorder.
+- In-game HUD with score, time, Threat, wave gauge, skill slots, boss hints,
+  tutorial callouts, and bottom Earth Energy.
 
-- RankingScreen (Phase 6), ModeSelectScreen (Phase 5).
+## Remaining UI Work
+
+- Real-device/WebView readability QA.
+- Final art/content replacement once approved assets are provided.
+- Remote/live leaderboard presentation after identity-bound public rows are
+  verified.

@@ -172,6 +172,18 @@ describe("ScoringSystem.onHit (콤보 += N, Multi Cut, 게이지, Last Save)", (
     expect(snap.score).toBeGreaterThan(0);
   });
 
+  it("addBonus adds special object score without changing combo or kill count", () => {
+    const s = new ScoringSystem(cfg);
+
+    s.addBonus(120);
+
+    expect(s.snapshot()).toMatchObject({
+      score: 120,
+      combo: 0,
+      kills: 0,
+    });
+  });
+
   it("baseScore는 enemies.json.score 출처(주입 콜백) 사용", () => {
     const s = new ScoringSystem(cfg);
     const out = s.onHit([hit("outer", 99)], baseScoreOf, () => "basic_meteor");

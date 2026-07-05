@@ -4,168 +4,104 @@
       "fromMs": 0,
       "spawnIntervalMs": 940,
       "approachSpeedMul": 1.00,
-      "weights": {
-        "shard_meteor": 58,
-        "small_meteor": 32,
-        "basic_meteor": 10
-      }
+      "weights": { "shard_meteor": 58, "small_meteor": 32, "basic_meteor": 10 }
     },
     {
-      "fromMs": 10000,
+      "fromMs": 7000,
       "spawnIntervalMs": 900,
       "approachSpeedMul": 1.05,
-      "weights": {
-        "shard_meteor": 42,
-        "small_meteor": 38,
-        "basic_meteor": 16,
-        "fast_comet": 4
-      }
+      "weights": { "shard_meteor": 42, "small_meteor": 38, "basic_meteor": 16, "fast_comet": 4 }
     },
     {
-      "fromMs": 20000,
+      "fromMs": 14000,
       "spawnIntervalMs": 860,
       "approachSpeedMul": 1.10,
-      "weights": {
-        "shard_meteor": 30,
-        "small_meteor": 36,
-        "basic_meteor": 22,
-        "fast_comet": 8,
-        "iron_planet": 4
-      }
+      "weights": { "shard_meteor": 30, "small_meteor": 36, "basic_meteor": 22, "fast_comet": 8, "iron_planet": 4 }
     },
     {
-      "fromMs": 30000,
+      "fromMs": 21000,
       "spawnIntervalMs": 820,
       "approachSpeedMul": 1.16,
-      "weights": {
-        "shard_meteor": 22,
-        "small_meteor": 30,
-        "basic_meteor": 25,
-        "fast_comet": 12,
-        "iron_planet": 7,
-        "directional_comet": 4
-      },
-      "maxConsecutive": {
-        "directional_comet": 2
-      }
+      "weights": { "shard_meteor": 22, "small_meteor": 30, "basic_meteor": 25, "fast_comet": 12, "iron_planet": 7, "directional_comet": 4 },
+      "maxConsecutive": { "directional_comet": 2 }
     },
     {
-      "fromMs": 40000,
+      "fromMs": 28000,
       "spawnIntervalMs": 780,
       "approachSpeedMul": 1.22,
-      "weights": {
-        "shard_meteor": 16,
-        "small_meteor": 24,
-        "basic_meteor": 26,
-        "fast_comet": 14,
-        "iron_planet": 10,
-        "directional_comet": 6,
-        "heavy_asteroid": 4
-      },
-      "maxConsecutive": {
-        "directional_comet": 2,
-        "heavy_asteroid": 2
-      }
+      "weights": { "shard_meteor": 16, "small_meteor": 22, "basic_meteor": 24, "fast_comet": 13, "iron_planet": 9, "fire_meteor": 5, "ice_comet": 5, "directional_comet": 4, "heavy_asteroid": 2 },
+      "maxConsecutive": { "directional_comet": 2, "heavy_asteroid": 2 }
     },
     {
-      "fromMs": 50000,
+      "fromMs": 35000,
       "spawnIntervalMs": 740,
       "approachSpeedMul": 1.30,
-      "weights": {
-        "shard_meteor": 12,
-        "small_meteor": 20,
-        "basic_meteor": 25,
-        "fast_comet": 16,
-        "iron_planet": 12,
-        "directional_comet": 8,
-        "heavy_asteroid": 5,
-        "ancient_planet": 2
-      },
-      "maxConsecutive": {
-        "directional_comet": 2,
-        "heavy_asteroid": 2,
-        "ancient_planet": 1
-      }
+      "weights": { "shard_meteor": 12, "small_meteor": 18, "basic_meteor": 22, "fast_comet": 14, "iron_planet": 10, "fire_meteor": 7, "ice_comet": 6, "crystal_meteor": 4, "directional_comet": 5, "heavy_asteroid": 2 },
+      "maxConsecutive": { "directional_comet": 2, "heavy_asteroid": 2 }
     },
     {
-      "fromMs": 60000,
+      "fromMs": 42000,
       "spawnIntervalMs": 700,
       "approachSpeedMul": 1.38,
-      "weights": {
-        "shard_meteor": 10,
-        "small_meteor": 16,
-        "basic_meteor": 23,
-        "fast_comet": 18,
-        "iron_planet": 14,
-        "directional_comet": 9,
-        "heavy_asteroid": 7,
-        "ancient_planet": 3
-      },
-      "maxConsecutive": {
-        "directional_comet": 2,
-        "heavy_asteroid": 2,
-        "ancient_planet": 1
-      }
+      "weights": { "shard_meteor": 10, "small_meteor": 15, "basic_meteor": 20, "fast_comet": 16, "iron_planet": 12, "fire_meteor": 8, "ice_comet": 7, "crystal_meteor": 5, "directional_comet": 5, "heavy_asteroid": 2 },
+      "maxConsecutive": { "directional_comet": 2, "heavy_asteroid": 2 }
     },
     {
-      "fromMs": 70000,
+      "fromMs": 49000,
       "spawnIntervalMs": 670,
       "approachSpeedMul": 1.46,
-      "weights": {
-        "shard_meteor": 8,
-        "small_meteor": 14,
-        "basic_meteor": 20,
-        "fast_comet": 20,
-        "iron_planet": 15,
-        "directional_comet": 10,
-        "heavy_asteroid": 9,
-        "ancient_planet": 4
-      },
-      "maxConsecutive": {
-        "directional_comet": 2,
-        "heavy_asteroid": 2,
-        "ancient_planet": 1
-      }
+      "weights": { "shard_meteor": 8, "small_meteor": 13, "basic_meteor": 18, "fast_comet": 18, "iron_planet": 13, "fire_meteor": 9, "ice_comet": 8, "crystal_meteor": 6, "directional_comet": 5, "heavy_asteroid": 2 },
+      "maxConsecutive": { "directional_comet": 2, "heavy_asteroid": 2 }
     },
     {
-      "fromMs": 80000,
+      "fromMs": 56000,
       "spawnIntervalMs": 640,
       "approachSpeedMul": 1.55,
-      "weights": {
-        "shard_meteor": 6,
-        "small_meteor": 12,
-        "basic_meteor": 18,
-        "fast_comet": 21,
-        "iron_planet": 16,
-        "directional_comet": 11,
-        "heavy_asteroid": 11,
-        "ancient_planet": 5
-      },
-      "maxConsecutive": {
-        "directional_comet": 2,
-        "heavy_asteroid": 2,
-        "ancient_planet": 1
-      }
+      "weights": { "shard_meteor": 6, "small_meteor": 11, "basic_meteor": 16, "fast_comet": 20, "iron_planet": 14, "fire_meteor": 10, "ice_comet": 9, "crystal_meteor": 7, "directional_comet": 5, "heavy_asteroid": 2 },
+      "maxConsecutive": { "directional_comet": 2, "heavy_asteroid": 2 }
     },
     {
-      "fromMs": 90000,
+      "fromMs": 63000,
       "spawnIntervalMs": 610,
       "approachSpeedMul": 1.65,
-      "weights": {
-        "shard_meteor": 5,
-        "small_meteor": 10,
-        "basic_meteor": 16,
-        "fast_comet": 22,
-        "iron_planet": 17,
-        "directional_comet": 12,
-        "heavy_asteroid": 12,
-        "ancient_planet": 6
-      },
-      "maxConsecutive": {
-        "directional_comet": 2,
-        "heavy_asteroid": 2,
-        "ancient_planet": 1
-      }
+      "weights": { "shard_meteor": 5, "small_meteor": 9, "basic_meteor": 14, "fast_comet": 21, "iron_planet": 15, "fire_meteor": 11, "ice_comet": 10, "crystal_meteor": 8, "directional_comet": 5, "heavy_asteroid": 2 },
+      "maxConsecutive": { "directional_comet": 2, "heavy_asteroid": 2 }
     }
+  ],
+  "defender": [
+    { "fromMs": 0, "spawnIntervalMs": 860, "approachSpeedMul": 1.08, "weights": { "shard_meteor": 34, "small_meteor": 34, "basic_meteor": 24, "fast_comet": 8 } },
+    { "fromMs": 7000, "spawnIntervalMs": 820, "approachSpeedMul": 1.14, "weights": { "shard_meteor": 24, "small_meteor": 32, "basic_meteor": 28, "fast_comet": 12, "iron_planet": 4 } },
+    { "fromMs": 14000, "spawnIntervalMs": 780, "approachSpeedMul": 1.20, "weights": { "shard_meteor": 18, "small_meteor": 26, "basic_meteor": 30, "fast_comet": 14, "iron_planet": 7, "fire_meteor": 5 } },
+    { "fromMs": 21000, "spawnIntervalMs": 740, "approachSpeedMul": 1.28, "weights": { "shard_meteor": 14, "small_meteor": 22, "basic_meteor": 26, "fast_comet": 16, "iron_planet": 9, "fire_meteor": 6, "ice_comet": 5, "directional_comet": 2 }, "maxConsecutive": { "directional_comet": 2 } },
+    { "fromMs": 28000, "spawnIntervalMs": 700, "approachSpeedMul": 1.36, "weights": { "shard_meteor": 10, "small_meteor": 18, "basic_meteor": 24, "fast_comet": 17, "iron_planet": 10, "fire_meteor": 7, "ice_comet": 6, "crystal_meteor": 4, "directional_comet": 3, "heavy_asteroid": 1 }, "maxConsecutive": { "directional_comet": 2, "heavy_asteroid": 2 } },
+    { "fromMs": 35000, "spawnIntervalMs": 660, "approachSpeedMul": 1.45, "weights": { "small_meteor": 16, "basic_meteor": 22, "fast_comet": 18, "iron_planet": 11, "fire_meteor": 9, "ice_comet": 8, "crystal_meteor": 5, "directional_comet": 4, "heavy_asteroid": 2 }, "maxConsecutive": { "directional_comet": 2, "heavy_asteroid": 2 } },
+    { "fromMs": 42000, "spawnIntervalMs": 630, "approachSpeedMul": 1.55, "weights": { "small_meteor": 13, "basic_meteor": 20, "fast_comet": 19, "iron_planet": 12, "fire_meteor": 10, "ice_comet": 9, "crystal_meteor": 6, "directional_comet": 5, "heavy_asteroid": 3 }, "maxConsecutive": { "directional_comet": 2, "heavy_asteroid": 2 } },
+    { "fromMs": 49000, "spawnIntervalMs": 600, "approachSpeedMul": 1.66, "weights": { "small_meteor": 10, "basic_meteor": 18, "fast_comet": 20, "iron_planet": 13, "fire_meteor": 11, "ice_comet": 10, "crystal_meteor": 7, "directional_comet": 6, "heavy_asteroid": 4 }, "maxConsecutive": { "directional_comet": 2, "heavy_asteroid": 2 } },
+    { "fromMs": 56000, "spawnIntervalMs": 570, "approachSpeedMul": 1.78, "weights": { "small_meteor": 8, "basic_meteor": 16, "fast_comet": 21, "iron_planet": 14, "fire_meteor": 12, "ice_comet": 11, "crystal_meteor": 8, "directional_comet": 6, "heavy_asteroid": 5 }, "maxConsecutive": { "directional_comet": 2, "heavy_asteroid": 2 } },
+    { "fromMs": 63000, "spawnIntervalMs": 540, "approachSpeedMul": 1.90, "weights": { "small_meteor": 6, "basic_meteor": 14, "fast_comet": 22, "iron_planet": 15, "fire_meteor": 13, "ice_comet": 12, "crystal_meteor": 9, "directional_comet": 7, "heavy_asteroid": 6 }, "maxConsecutive": { "directional_comet": 2, "heavy_asteroid": 2 } }
+  ],
+  "elite": [
+    { "fromMs": 0, "spawnIntervalMs": 760, "approachSpeedMul": 1.18, "weights": { "small_meteor": 28, "basic_meteor": 32, "fast_comet": 22, "iron_planet": 10, "fire_meteor": 8 } },
+    { "fromMs": 7000, "spawnIntervalMs": 720, "approachSpeedMul": 1.26, "weights": { "small_meteor": 20, "basic_meteor": 30, "fast_comet": 24, "iron_planet": 12, "fire_meteor": 8, "ice_comet": 6 } },
+    { "fromMs": 14000, "spawnIntervalMs": 680, "approachSpeedMul": 1.36, "weights": { "small_meteor": 14, "basic_meteor": 24, "fast_comet": 25, "iron_planet": 13, "fire_meteor": 9, "ice_comet": 7, "crystal_meteor": 5, "directional_comet": 3 }, "maxConsecutive": { "directional_comet": 2 } },
+    { "fromMs": 21000, "spawnIntervalMs": 640, "approachSpeedMul": 1.48, "weights": { "basic_meteor": 20, "fast_comet": 25, "iron_planet": 13, "fire_meteor": 10, "ice_comet": 8, "crystal_meteor": 6, "directional_comet": 5, "shield_rock": 4, "heavy_asteroid": 3 }, "maxConsecutive": { "directional_comet": 2, "shield_rock": 2, "heavy_asteroid": 2 } },
+    { "fromMs": 28000, "spawnIntervalMs": 600, "approachSpeedMul": 1.60, "weights": { "basic_meteor": 16, "fast_comet": 24, "iron_planet": 13, "fire_meteor": 10, "ice_comet": 9, "crystal_meteor": 7, "directional_comet": 6, "shield_rock": 5, "electric_meteor": 4, "heavy_asteroid": 4 }, "maxConsecutive": { "directional_comet": 2, "shield_rock": 2, "electric_meteor": 2, "heavy_asteroid": 2 } },
+    { "fromMs": 35000, "spawnIntervalMs": 565, "approachSpeedMul": 1.72, "weights": { "basic_meteor": 12, "fast_comet": 24, "iron_planet": 14, "fire_meteor": 11, "ice_comet": 10, "crystal_meteor": 8, "directional_comet": 7, "shield_rock": 6, "electric_meteor": 5, "graviton_core": 3, "heavy_asteroid": 4 }, "maxConsecutive": { "directional_comet": 2, "shield_rock": 2, "electric_meteor": 2, "graviton_core": 1, "heavy_asteroid": 2 } },
+    { "fromMs": 42000, "spawnIntervalMs": 535, "approachSpeedMul": 1.84, "weights": { "basic_meteor": 10, "fast_comet": 23, "iron_planet": 14, "fire_meteor": 11, "ice_comet": 10, "crystal_meteor": 8, "directional_comet": 8, "shield_rock": 7, "electric_meteor": 6, "graviton_core": 4, "heavy_asteroid": 5 }, "maxConsecutive": { "directional_comet": 2, "shield_rock": 2, "electric_meteor": 2, "graviton_core": 1, "heavy_asteroid": 2 } },
+    { "fromMs": 49000, "spawnIntervalMs": 505, "approachSpeedMul": 1.98, "weights": { "basic_meteor": 8, "fast_comet": 22, "iron_planet": 14, "fire_meteor": 12, "ice_comet": 11, "crystal_meteor": 9, "directional_comet": 8, "shield_rock": 8, "electric_meteor": 7, "graviton_core": 5, "heavy_asteroid": 6 }, "maxConsecutive": { "directional_comet": 2, "shield_rock": 2, "electric_meteor": 2, "graviton_core": 1, "heavy_asteroid": 2 } },
+    { "fromMs": 56000, "spawnIntervalMs": 480, "approachSpeedMul": 2.10, "weights": { "basic_meteor": 6, "fast_comet": 21, "iron_planet": 14, "fire_meteor": 12, "ice_comet": 12, "crystal_meteor": 10, "directional_comet": 9, "shield_rock": 9, "electric_meteor": 8, "graviton_core": 6, "heavy_asteroid": 7 }, "maxConsecutive": { "directional_comet": 2, "shield_rock": 2, "electric_meteor": 2, "graviton_core": 1, "heavy_asteroid": 2 } },
+    { "fromMs": 63000, "spawnIntervalMs": 455, "approachSpeedMul": 2.22, "weights": { "basic_meteor": 4, "fast_comet": 20, "iron_planet": 14, "fire_meteor": 13, "ice_comet": 12, "crystal_meteor": 10, "directional_comet": 10, "shield_rock": 10, "electric_meteor": 9, "graviton_core": 7, "heavy_asteroid": 8 }, "maxConsecutive": { "directional_comet": 2, "shield_rock": 2, "electric_meteor": 2, "graviton_core": 1, "heavy_asteroid": 2 } }
+  ],
+  "master": [
+    { "fromMs": 0, "spawnIntervalMs": 650, "approachSpeedMul": 1.36, "weights": { "basic_meteor": 24, "fast_comet": 30, "iron_planet": 16, "fire_meteor": 12, "ice_comet": 10, "directional_comet": 8 }, "maxConsecutive": { "directional_comet": 2 } },
+    { "fromMs": 7000, "spawnIntervalMs": 610, "approachSpeedMul": 1.50, "weights": { "basic_meteor": 18, "fast_comet": 30, "iron_planet": 16, "fire_meteor": 13, "ice_comet": 11, "crystal_meteor": 8, "directional_comet": 8, "shield_rock": 4 }, "maxConsecutive": { "directional_comet": 2, "shield_rock": 2 } },
+    { "fromMs": 14000, "spawnIntervalMs": 570, "approachSpeedMul": 1.66, "weights": { "basic_meteor": 12, "fast_comet": 28, "iron_planet": 16, "fire_meteor": 13, "ice_comet": 12, "crystal_meteor": 9, "directional_comet": 9, "shield_rock": 6, "electric_meteor": 5 }, "maxConsecutive": { "directional_comet": 2, "shield_rock": 2, "electric_meteor": 2 } },
+    { "fromMs": 21000, "spawnIntervalMs": 535, "approachSpeedMul": 1.82, "weights": { "fast_comet": 26, "iron_planet": 16, "fire_meteor": 14, "ice_comet": 12, "crystal_meteor": 10, "directional_comet": 10, "shield_rock": 7, "electric_meteor": 6, "graviton_core": 4, "heavy_asteroid": 3 }, "maxConsecutive": { "directional_comet": 2, "shield_rock": 2, "electric_meteor": 2, "graviton_core": 1, "heavy_asteroid": 2 } },
+    { "fromMs": 28000, "spawnIntervalMs": 500, "approachSpeedMul": 2.00, "weights": { "fast_comet": 22, "iron_planet": 15, "fire_meteor": 14, "ice_comet": 13, "crystal_meteor": 10, "directional_comet": 10, "shield_rock": 8, "electric_meteor": 7, "graviton_core": 5, "dark_meteor": 4, "heavy_asteroid": 4 }, "maxConsecutive": { "directional_comet": 2, "shield_rock": 2, "electric_meteor": 2, "graviton_core": 1, "dark_meteor": 2, "heavy_asteroid": 2 } },
+    { "fromMs": 35000, "spawnIntervalMs": 470, "approachSpeedMul": 2.18, "weights": { "fast_comet": 20, "iron_planet": 14, "fire_meteor": 14, "ice_comet": 13, "crystal_meteor": 10, "directional_comet": 11, "shield_rock": 9, "electric_meteor": 8, "graviton_core": 6, "dark_meteor": 5, "armored_fragment": 3, "heavy_asteroid": 4 }, "maxConsecutive": { "directional_comet": 2, "shield_rock": 2, "electric_meteor": 2, "graviton_core": 1, "dark_meteor": 2, "armored_fragment": 1, "heavy_asteroid": 2 } },
+    { "fromMs": 42000, "spawnIntervalMs": 445, "approachSpeedMul": 2.36, "weights": { "fast_comet": 18, "iron_planet": 13, "fire_meteor": 14, "ice_comet": 13, "crystal_meteor": 11, "directional_comet": 11, "shield_rock": 10, "electric_meteor": 9, "graviton_core": 7, "dark_meteor": 6, "armored_fragment": 4, "heavy_asteroid": 4 }, "maxConsecutive": { "directional_comet": 2, "shield_rock": 2, "electric_meteor": 2, "graviton_core": 1, "dark_meteor": 2, "armored_fragment": 1, "heavy_asteroid": 2 } },
+    { "fromMs": 49000, "spawnIntervalMs": 420, "approachSpeedMul": 2.55, "weights": { "fast_comet": 16, "iron_planet": 12, "fire_meteor": 14, "ice_comet": 13, "crystal_meteor": 11, "directional_comet": 12, "shield_rock": 10, "electric_meteor": 10, "graviton_core": 8, "dark_meteor": 7, "armored_fragment": 5, "heavy_asteroid": 4 }, "maxConsecutive": { "directional_comet": 2, "shield_rock": 2, "electric_meteor": 2, "graviton_core": 1, "dark_meteor": 2, "armored_fragment": 1, "heavy_asteroid": 2 } },
+    { "fromMs": 56000, "spawnIntervalMs": 400, "approachSpeedMul": 2.72, "weights": { "fast_comet": 14, "iron_planet": 11, "fire_meteor": 14, "ice_comet": 14, "crystal_meteor": 12, "directional_comet": 12, "shield_rock": 11, "electric_meteor": 10, "graviton_core": 9, "dark_meteor": 8, "armored_fragment": 6, "heavy_asteroid": 4 }, "maxConsecutive": { "directional_comet": 2, "shield_rock": 2, "electric_meteor": 2, "graviton_core": 1, "dark_meteor": 2, "armored_fragment": 1, "heavy_asteroid": 2 } },
+    { "fromMs": 63000, "spawnIntervalMs": 380, "approachSpeedMul": 2.90, "weights": { "fast_comet": 12, "iron_planet": 10, "fire_meteor": 14, "ice_comet": 14, "crystal_meteor": 12, "directional_comet": 13, "shield_rock": 12, "electric_meteor": 11, "graviton_core": 10, "dark_meteor": 9, "armored_fragment": 7, "heavy_asteroid": 4 }, "maxConsecutive": { "directional_comet": 2, "shield_rock": 2, "electric_meteor": 2, "graviton_core": 1, "dark_meteor": 2, "armored_fragment": 1, "heavy_asteroid": 2 } }
   ]
 }

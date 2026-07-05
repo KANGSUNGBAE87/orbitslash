@@ -22,6 +22,34 @@ export function computeScale(screenWidth: number, screenHeight: number): number 
   return Math.min(screenWidth / BASE_WIDTH, screenHeight / BASE_HEIGHT);
 }
 
+export interface SafeAreaInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export interface RootFit {
+  scale: number;
+  x: number;
+  y: number;
+}
+
+export function computeRootFit(
+  screenWidth: number,
+  screenHeight: number,
+  safeArea: SafeAreaInsets = { top: 0, right: 0, bottom: 0, left: 0 },
+): RootFit {
+  const usableWidth = Math.max(1, screenWidth - safeArea.left - safeArea.right);
+  const usableHeight = Math.max(1, screenHeight - safeArea.top - safeArea.bottom);
+  const scale = computeScale(usableWidth, usableHeight);
+  return {
+    scale,
+    x: safeArea.left + (usableWidth - BASE_WIDTH * scale) / 2,
+    y: safeArea.top + (usableHeight - BASE_HEIGHT * scale) / 2,
+  };
+}
+
 /** 두 점 사이 거리. */
 export function distance(ax: number, ay: number, bx: number, by: number): number {
   const dx = bx - ax;

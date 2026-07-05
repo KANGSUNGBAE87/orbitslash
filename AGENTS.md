@@ -143,10 +143,35 @@ Rules:
 For every app project, including newly created projects, plan and implement ad telemetry when banner, interstitial/full-screen, rewarded, or platform ads are introduced.
 
 - Keep ad SDK calls behind platform adapters such as `AdsAdapter`; product/domain logic must not import Apps in Toss Ads, AdMob, or other ad SDKs directly.
+- For rewarded ads, grant durable rewards only on `userEarnedReward` or a platform-equivalent earned callback, but do not treat that reward event as UI flow completion. Success UI, navigation, and caller-side completion must wait for official dismiss/close after the reward, or a conservative reward-earned-but-dismiss-missing grace fallback.
+- Do not use a generic pre-reward show hard-timeout for rewarded ads that rejects, advances the app, or unsubscribes while a native ad may still be showing. Keep load/preload timeouts and terminal failure handling; clear SDK listeners only after terminal failure or reward plus dismiss/grace completion. For Apps in Toss, `dismissed` is the official close event; `closed` is non-standard and may be telemetry-only.
 - Add a Supabase-backed or server-backed ad telemetry path by default: client code may call only an Edge Function/server endpoint with public credentials, and the server performs table writes with service-role/admin credentials. Do not let the app bundle write directly to diagnostics tables.
-- Track banner, interstitial/full-screen, and rewarded ad lifecycle events separately. At minimum record load/preload/request, show, impression, click, dismiss, no-fill, render/show failure, and final result. For rewarded ads, record `userEarnedReward` separately and never grant durable rewards from show, dismiss, network response, or generic success alone.
-- Persist diagnostic fields such as `event_name`, `ad_format`, `placement_id`, `ad_group_id`, `sdk_event_type`, `reason`, `shown`, `rewarded`, `screen`, `runtime`, app/session trace id, app version/build/deployment id when available, and timestamps.
+- Track banner, interstitial/full-screen, and rewarded ad lifecycle events separately. At minimum record load/preload/request, show, impression, click, dismiss, no-fill, render/show failure, earned reward, and final result. For rewarded ads, record `userEarnedReward` and final lifecycle completion separately; never grant durable rewards from show, dismiss, network response, ad request success, or generic success alone.
+- Persist diagnostic fields such as `event_name`, `ad_format`, `placement_id`, `ad_group_id`, `sdk_event_type`, `reason`, `shown`, `rewarded`, `screen`, `runtime`, `event_sequence`, `final_event`, `show_to_reward_ms`, `reward_to_dismiss_ms`, `show_to_dismiss_ms`, app/session trace id, app version/build/deployment id when available, and timestamps.
 - Do not store raw Toss `userKey`, advertising IDs, device IDs, nicknames, invite codes, answer payloads, free-text relationship content, or other unnecessary personal data in ad telemetry. Use random app/session trace IDs and hashed/internal IDs only when a real debugging need is documented.
 - For Apps in Toss, compare internal telemetry against Apps in Toss Console metrics to distinguish preload requests, actual impressions, rewarded completion, no-fill, invalid/test traffic, and dashboard reporting delay.
 - Release plans and session logs must state whether the telemetry table/migration, Edge Function/server endpoint, env configuration, deployment, and real-device ad QA are complete.
 <!-- APP_AD_TELEMETRY_STANDARD_END -->
+## Caveman Output Mode
+
+- Apply caveman style immediately from the first user-facing response in every
+  Codex/Claude/Hermes session: terse Korean by default, no filler, no
+  pleasantries, no unnecessary tool-call narration.
+- If the `caveman` skill exists on disk but is not shown in the active skill
+  registry, follow the global caveman rule manually.
+- Do not announce the mode unless asked.
+- Preserve uncertainty, tradeoffs, comparison tables, safety warnings,
+  irreversible action confirmations, and order-sensitive steps when compression
+  could hide meaning.
+
+<!-- APPS_IN_TOSS_DEPLOY_MEMO_RULE_START -->
+## Apps in Toss Deploy Memo Rule
+
+When deploying Apps in Toss from this project, `ait deploy` must include `-m` or `--memo` with a concise summary of the actual changes in that uploaded bundle. Do not leave the Console version memo blank. Follow `/Users/kangsungbae/Documents/지식저장소/docs/workflows/apps-in-toss-release-gate.md`.
+<!-- APPS_IN_TOSS_DEPLOY_MEMO_RULE_END -->
+
+<!-- APPS_IN_TOSS_RUNTIME_CHANNEL_LOGGING_START -->
+## Apps in Toss Runtime Channel Logging
+
+For any Apps in Toss project, follow the shared runtime-channel logging standard in `/Users/kangsungbae/Documents/지식저장소/docs/tools/apps-in-toss-platform.md` and the Codex global instructions. Logs/API calls that can affect live-vs-test interpretation, including deploy tests, promotions, rewards, ads, diagnostics, and action logs, must persist `runtime_channel` with canonical values `sandbox`, `toss_private_test`, or `toss_live`. Use official runtime, scheme, host, and `_deploymentId` signals; do not rely only on build env, Console review status, or `TEST_` promotion codes. Live audits and dashboards default to `runtime_channel = 'toss_live'`.
+<!-- APPS_IN_TOSS_RUNTIME_CHANNEL_LOGGING_END -->

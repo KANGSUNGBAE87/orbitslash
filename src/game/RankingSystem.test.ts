@@ -26,6 +26,14 @@ describe("RankingSystem readiness helpers", () => {
   });
 
   it("rejects impossible score submissions before backend handoff", () => {
+    expect(validateRunSubmission({ runToken: "", seed: 1, score: 100, survivalMs: 1000, remainingEnergy: 20 })).toEqual({
+      ok: false,
+      reason: "invalid_token",
+    });
+    expect(validateRunSubmission({ runToken: "local-1", seed: -1, score: 100, survivalMs: 1000, remainingEnergy: 20 })).toEqual({
+      ok: false,
+      reason: "invalid_seed",
+    });
     expect(validateRunSubmission({ score: -1, survivalMs: 1000, remainingEnergy: 20 })).toEqual({
       ok: false,
       reason: "score_negative",
@@ -33,6 +41,28 @@ describe("RankingSystem readiness helpers", () => {
     expect(validateRunSubmission({ score: 100, survivalMs: 1000, remainingEnergy: 101 })).toEqual({
       ok: false,
       reason: "energy_out_of_range",
+    });
+  });
+
+  it("rejects impossible count and skill-use submissions before backend handoff", () => {
+    expect(validateRunSubmission({ score: 100, survivalMs: 1000, remainingEnergy: 20, kills: -1 })).toEqual({
+      ok: false,
+      reason: "count_negative",
+    });
+    expect(validateRunSubmission({ score: 100, survivalMs: 1000, remainingEnergy: 20, maxCombo: 1.5 })).toEqual({
+      ok: false,
+      reason: "count_not_integer",
+    });
+    expect(
+      validateRunSubmission({
+        score: 100,
+        survivalMs: 1000,
+        remainingEnergy: 20,
+        skillUse: { solar_lance: -1 },
+      }),
+    ).toEqual({
+      ok: false,
+      reason: "skill_use_negative",
     });
   });
 });

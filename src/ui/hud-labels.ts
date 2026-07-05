@@ -1,8 +1,7 @@
 import { t } from "../i18n";
 import type { MultiCutTier } from "../game/types";
 
-// HUD 라벨 헬퍼 (design §6, i18n). 사용자 대면 문자열은 전부 t(key) 경유 — 하드코딩 금지.
-// 실제 HUD DOM/Canvas 배선은 Subagent B (TODO(Phase1-B), /ui/README.md 참조).
+// HUD 라벨 헬퍼 (design §6, i18n). 사용자 대면 문자열은 전부 t(key) 경유.
 
 export function lastSaveLabel(): string {
   return t("label.lastSave"); // ko "지구 직전 방어!" / en "LAST SAVE!"

@@ -10,12 +10,14 @@ export interface WaveConfig {
   difficulty: string;
   durationMs?: number;
   spawnIntervalMs?: number; // 평균 스폰 간격 (기본 800ms)
+  spawnIntervalMultiplierForElapsed?: (elapsedMs: number) => number;
+  enemyWeightBias?: Record<string, number>;
   bossEveryMs?: number;
   bossEnemyType?: string;
 }
 
 const DEFAULT_INTERVAL_MS = 800;
-export const WAVE_DURATION_MS = 10000;
+export const WAVE_DURATION_MS = 7000;
 export const TOP_HUD_SAFE_Y = 370;
 const START_VISUAL_RADIUS_SAFE_SCALE = 0.7;
 
@@ -66,7 +68,9 @@ export class WaveGenerator {
   }
 
   private intervalMs(elapsedMs: number): number {
-    return this.cfg.spawnIntervalMs ?? activeWaveBand(this.waves, this.cfg.difficulty, elapsedMs)?.spawnIntervalMs ?? DEFAULT_INTERVAL_MS;
+    const base = this.cfg.spawnIntervalMs ?? activeWaveBand(this.waves, this.cfg.difficulty, elapsedMs)?.spawnIntervalMs ?? DEFAULT_INTERVAL_MS;
+    const multiplier = this.cfg.spawnIntervalMultiplierForElapsed?.(elapsedMs) ?? 1;
+    return Math.max(120, Math.round(base * multiplier));
   }
 
   /** 다음 스폰까지 간격 (결정적 지터: 평균 간격의 0.6~1.4배). */
@@ -80,7 +84,7 @@ export class WaveGenerator {
   private pickEnemyType(elapsedMs: number): string {
     const band = activeWaveBand(this.waves, this.cfg.difficulty, elapsedMs);
     if (band) {
-      const weighted = pickWeightedEnemyType(this.rng.next(), band, this.enemies, this.blockedEnemyTypes(band));
+      const weighted = pickWeightedEnemyType(this.rng.next(), band, this.enemies, this.blockedEnemyTypes(band), this.cfg.enemyWeightBias);
       if (weighted) return weighted;
     }
     const idx = this.rng.nextInt(this.enemyKeys.length);
@@ -197,8 +201,11 @@ export function pickWeightedEnemyType(
   band: WaveBand,
   enemies: EnemyTable,
   blockedTypes: ReadonlySet<string> = new Set(),
+  weightBias: Record<string, number> = {},
 ): string | undefined {
-  const entries = Object.entries(band.weights).filter(([key, weight]) => weight > 0 && enemies[key] && !blockedTypes.has(key));
+  const entries = Object.entries(band.weights)
+    .map(([key, weight]) => [key, weight * (weightBias[key] ?? 1)] as const)
+    .filter(([key, weight]) => weight > 0 && enemies[key] && !blockedTypes.has(key));
   const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
   if (total <= 0) return undefined;
   let cursor = rand * total;

@@ -49,4 +49,33 @@ describe("ObjectManager.applyDamage", () => {
 
     expect(objects.applyDamage(999, 1)).toEqual({ killed: false });
   });
+
+  it("shield enemies absorb configured hits before taking hp damage", () => {
+    const objects = new ObjectManager();
+    objects.add(enemy({ type: "shield_rock", hp: 3, shieldHits: 2 } as Partial<EnemyState>));
+
+    const first = objects.applyDamage(1, 1);
+    expect(first).toMatchObject({ killed: false, absorbed: true });
+    expect(first.enemy?.hp).toBe(3);
+
+    const second = objects.applyDamage(1, 1);
+    expect(second).toMatchObject({ killed: false, absorbed: true });
+    expect(second.enemy?.hp).toBe(3);
+
+    const third = objects.applyDamage(1, 1);
+    expect(third).toMatchObject({ killed: false, absorbed: false });
+    expect(third.enemy?.hp).toBe(2);
+  });
+
+  it("armored enemies spend armor layers before hp damage", () => {
+    const objects = new ObjectManager();
+    objects.add(enemy({ type: "armored_fragment", hp: 2, armorHits: 1 } as Partial<EnemyState>));
+
+    const first = objects.applyDamage(1, 1);
+    expect(first).toMatchObject({ killed: false, absorbed: true });
+    expect(first.enemy?.hp).toBe(2);
+
+    const second = objects.applyDamage(1, 2);
+    expect(second.killed).toBe(true);
+  });
 });

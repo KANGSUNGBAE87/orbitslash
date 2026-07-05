@@ -1,5 +1,5 @@
 import { Container, Graphics, Rectangle, Sprite, Texture, type FederatedPointerEvent } from "pixi.js";
-import { BASE_WIDTH, BASE_HEIGHT, EARTH_BODY_RADIUS, EARTH_GAMEPLAY_RADIUS, distance } from "./coords";
+import { BASE_WIDTH, BASE_HEIGHT, EARTH_BODY_RADIUS, EARTH_GAMEPLAY_RADIUS, distance, distanceBand } from "./coords";
 import { LAYER } from "./layers";
 import { Earth } from "./Earth";
 import { RemoteConfig } from "./RemoteConfig";
@@ -8,13 +8,13 @@ import { waveHudState, WaveGenerator } from "./WaveGenerator";
 import { ObjectManager } from "./ObjectManager";
 import { OrbitSpawner } from "./OrbitSpawner";
 import { GestureSystem } from "./GestureSystem";
-import { enemyTouchesImpactZone, resolveLineHits, resolveLiveSegmentHits, resolveLiveSegmentDirectionalRejects, multiCutTier } from "./CollisionSystem";
+import { enemyTouchesImpactZone, resolveLineHits, resolveLiveSegmentHits, resolveLiveSegmentDirectionalRejects, multiCutTier, segmentIntersectsCircle } from "./CollisionSystem";
 import { ScoringSystem, comboMultiplierFor } from "./ScoringSystem";
 import { EnergySystem } from "./EnergySystem";
 import { SkillSystem } from "./SkillSystem";
 import { RunSession } from "./RunSession";
 import { Telemetry } from "./Telemetry";
-import { stepEnemy, enemyXY } from "./Enemy";
+import { gravitonPullMultiplierForEnemy, splitSpawnSpecsForEnemy, stepEnemy, enemyXY } from "./Enemy";
 import { readDevNumberParam, readDevStringParam } from "./DevQa";
 import { feedbackForHitBand } from "./HitFeedback";
 import { requiredDirectionalSlashAngleRad } from "./DirectionalCut";
@@ -25,6 +25,15 @@ import { shouldReserveLiveSlashForSolarLance } from "./SolarLanceReserve";
 import { shouldReserveLiveSlashForGravitySlow } from "./GravitySlowReserve";
 import { groupByComboTimeout } from "./ComboTiming";
 import { buildSkillCooldownSlots } from "./SkillCooldownSlots";
+import { buildBossHudState } from "./BossHudState";
+import { buildTutorialHudState } from "./TutorialHudState";
+import { buildBossShardTelegraph, type BossShardTelegraph } from "./BossShardTelegraph";
+import { buildRunConfig, type ModeResult, type RunConfig, type RunEndReason, type SkillId } from "./ModeConfig";
+import { activeStoryStageForConfig, evaluateModeObjective, isProtectObjectiveObject, type ObjectiveSnapshot } from "./ModeObjectiveSystem";
+import { BossEncounterRuntime, bossWaveSpawnIntervalMultiplierForEnemy, bossWeakPointLocalCircles, resolveBossWeakPointHit, type BossShardEvent } from "./BossSystem";
+import { modeSpawnIntervalMultiplierAt, resolveModeRuntimeRules, type ModeRuntimeRules } from "./ModeRuleEngine";
+import { SpecialObjectRuntime } from "./SpecialObjectRuntime";
+import type { SpecialObjectHitEffect, SpecialObjectState, SpecialObjectType } from "./SpecialObjectSystem";
 import {
   ENEMY_HIT_SHAKE_DURATION_MS,
   ENEMY_HIT_SHAKE_INTENSITY_PX,
@@ -41,32 +50,79 @@ import { LaserVfx } from "../render/LaserVfx";
 import { HitBurst } from "../render/HitBurst";
 import { DestructionBurst } from "../render/DestructionBurst";
 import { drawDirectionalGuide, drawEnemyVisual, enemyTexture, enemyVisualStyle } from "../render/EnemyVisual";
+import { enemySpriteMotion, enemyTravelAngleRad, type EnemySpriteMotion } from "../render/EnemyMotion";
 import { Hud } from "../render/Hud";
 import { ResultOverlay } from "../render/ResultOverlay";
 import { multiCutLabel, lastSaveLabel, multiplierLabel } from "../ui/hud-labels";
 import { t } from "../i18n";
-import { LocalBackendAdapter } from "../platform/BackendAdapter";
+import {
+  createLocalRunStart,
+  LocalBackendAdapter,
+  validatePublicRankedStart,
+  validatePublicRankedSubmission,
+  type BackendAdapter,
+  type RankedRunStart,
+} from "../platform/BackendAdapter";
+import type { PlatformTelemetryContext } from "../platform/PlatformAdapter";
 import type { Point, EnemyState, EarthRef, ZoneTable, EnemyTable, ScoringConfig, DifficultyTable, SkillTable, OrbitProfile, WaveTable, HitResult, Segment, SpawnSpec } from "./types";
+import type { RankedReplaySpawnEvent } from "./RankedReplayTrace";
 
 // 한 판 플레이 씬 (implementation-plan §1, §4 게임 루프).
 // 고정 update 순서 (§4.1): input(이벤트) → spawn → movement → collision(지구) → scoring(이벤트) → render.
 //   슬래시 판정은 pointer-up 이벤트에서 즉시 확정(§2.3 Instant Judgment); 연출은 시각 전용.
 
-const DIFFICULTY = "rookie"; // Phase 1: 단일 난이도 (오픈이슈 #2)
 const GAUGE_MAX = 100;
 const NORMAL_SLASH_DAMAGE = 1;
-const BOSS_EVERY_MS = 60000;
-const BOSS_ENEMY_TYPE = "eclipse_core";
-const DEV_QA_PRESETS = ["directional", "lastSave", "dense"] as const;
+export const DEV_QA_PRESETS = ["directional", "lastSave", "dense", "boss", "blockedBody", "special"] as const;
 type DevQaPreset = (typeof DEV_QA_PRESETS)[number];
+const DEV_QA_SPECIAL_TYPES: SpecialObjectType[] = ["friendlyRescue", "energyCapsule", "satellite", "empMine"];
+
+const SPECIAL_PENALTY_LABEL_KEYS: Record<SpecialObjectType, string> = {
+  friendlyRescue: "special.penalty.friendlyRescue",
+  satellite: "special.penalty.satellite",
+  energyCapsule: "special.penalty.energyCapsule",
+  empMine: "special.penalty.empMine",
+};
+
+const SPECIAL_BENEFIT_LABEL_KEYS: Record<SpecialObjectType, string> = {
+  friendlyRescue: "special.benefit.friendlyRescue",
+  satellite: "special.benefit.satellite",
+  energyCapsule: "special.benefit.energyCapsule",
+  empMine: "special.benefit.empMine",
+};
+
+const SPECIAL_REWARD_LABEL_KEYS: Record<SpecialObjectType, string> = {
+  friendlyRescue: "special.rescue.friendlyRescue",
+  satellite: "special.rescue.satellite",
+  energyCapsule: "special.rescue.energyCapsule",
+  empMine: "special.rescue.empMine",
+};
+
+function specialPenaltyLabelKey(type?: SpecialObjectType): string {
+  return type ? SPECIAL_PENALTY_LABEL_KEYS[type] : "special.penalty";
+}
+
+function specialBenefitLabelKey(type?: SpecialObjectType): string {
+  return type ? SPECIAL_BENEFIT_LABEL_KEYS[type] : "special.benefit";
+}
+
+function specialRewardLabelKey(type?: SpecialObjectType): string {
+  return type ? SPECIAL_REWARD_LABEL_KEYS[type] : "special.rescue";
+}
 
 interface PendingKill {
   hit: HitResult;
+  damage: number;
+  spawnOrdinal?: number;
   score: number;
   type: string;
   x: number;
   y: number;
   hitAtMs: number;
+  boss?: boolean;
+  source?: "slash" | "solar_lance" | "skill";
+  skillId?: SkillId;
+  segment?: Segment;
 }
 
 interface EnemyHitFeedbackState {
@@ -95,7 +151,10 @@ function depthScale(radius: number, R: number, swell: number): number {
 export class GameScene {
   readonly stage: Container;
   private earth: Earth;
+  private enemyTrailLayer: Graphics;
+  private bossTelegraphLayer: Graphics;
   private enemyLayer: Container;
+  private specialLayer: Graphics;
   private slashTrail: SlashTrail;
   private laser: LaserVfx;
   private hitBurst: HitBurst;
@@ -111,17 +170,27 @@ export class GameScene {
   private readonly orbits: OrbitProfile[];
   private readonly waves: WaveTable;
   private readonly zones: ZoneTable;
+  private runConfig: RunConfig;
+  private readonly showResultOverlay: boolean;
+  private readonly backend: BackendAdapter;
+  private readonly platformTelemetryContext: PlatformTelemetryContext;
+  private pendingRunStart?: RankedRunStart;
+  private currentRunStart!: RankedRunStart;
 
   // 시스템 (한 판마다 재생성)
   private objects!: ObjectManager;
   private spawner!: OrbitSpawner;
   private wave!: WaveGenerator;
+  private bossRuntime!: BossEncounterRuntime;
+  private modeRuntimeRules!: ModeRuntimeRules;
+  private specialObjects!: SpecialObjectRuntime;
   private scoring!: ScoringSystem;
   private energy!: EnergySystem;
   private skills!: SkillSystem;
   private runSession!: RunSession;
-  private readonly backend = new LocalBackendAdapter();
   private gesture = new GestureSystem();
+  onRunEnd: ((result: ModeResult) => void) | null = null;
+  onRankedSubmissionUpdate: ((state: NonNullable<ModeResult["rankingSubmissionState"]>) => void) | null = null;
 
   // 적 스프라이트 (간단 풀)
   private sprites = new Map<number, EnemySpriteNode>();
@@ -133,6 +202,11 @@ export class GameScene {
   private gauge = 0;
   private gravitySlowRemainingMs = 0;
   private gravitySlowMultiplier = 1;
+  private deltaShieldRemainingMs = 0;
+  private deltaShieldAbsorbs = 0;
+  private deltaShieldDurationMs = 0;
+  private deltaShieldMaxAbsorbs = 0;
+  private activePointerId: number | null = null;
   private livePoints: Point[] = [];
   private strokeHitTracker = new StrokeHitTracker({
     exitMarginPx: SAME_STROKE_REHIT_EXIT_MARGIN_PX,
@@ -143,8 +217,24 @@ export class GameScene {
   private strokeMoved = false;
   private strokeDirectionalRejects = new Set<number>();
   private enemyHitFeedback = new Map<number, EnemyHitFeedbackState>();
+  private bossShardTelegraphs: BossShardTelegraph[] = [];
+  private bossKills = 0;
+  private defeatedBossIds: string[] = [];
+  private protectedCount = 0;
+  private failedProtectCount = 0;
+  private spawnOrdinalSeq = 0;
+  private telemetrySessionTraceId = createTelemetrySessionTraceId();
+  private telemetryEventSequence = 0;
 
-  constructor() {
+  constructor(
+    runConfig: RunConfig = buildRunConfig("freeDefense"),
+    options: { showResultOverlay?: boolean; backend?: BackendAdapter; runStart?: RankedRunStart; platformTelemetryContext?: PlatformTelemetryContext } = {},
+  ) {
+    this.runConfig = runConfig;
+    this.showResultOverlay = options.showResultOverlay ?? true;
+    this.backend = options.backend ?? new LocalBackendAdapter();
+    this.platformTelemetryContext = options.platformTelemetryContext ?? { runtime: "web_stub" };
+    this.pendingRunStart = options.runStart;
     this.stage = new Container();
     this.stage.sortableChildren = true;
 
@@ -176,10 +266,22 @@ export class GameScene {
     stars.zIndex = LAYER.STARS_NEBULA;
     this.stage.addChild(stars);
 
-    // L4 적 레이어
+    // L3~L4 적 잔상/본체 레이어
+    this.enemyTrailLayer = new Graphics();
+    this.enemyTrailLayer.zIndex = LAYER.ENEMY_TRAILS;
+    this.stage.addChild(this.enemyTrailLayer);
+
+    this.bossTelegraphLayer = new Graphics();
+    this.bossTelegraphLayer.zIndex = LAYER.EXPLOSION;
+    this.stage.addChild(this.bossTelegraphLayer);
+
     this.enemyLayer = new Container();
     this.enemyLayer.zIndex = LAYER.ENEMIES;
     this.stage.addChild(this.enemyLayer);
+
+    this.specialLayer = new Graphics();
+    this.specialLayer.zIndex = LAYER.FRIENDLY;
+    this.stage.addChild(this.specialLayer);
 
     // L7 지구
     this.earth = new Earth();
@@ -206,18 +308,29 @@ export class GameScene {
     this.stage.on("pointermove", this.onPointerMove, this);
     this.stage.on("pointerup", this.onPointerUp, this);
     this.stage.on("pointerupoutside", this.onPointerUp, this);
+    this.stage.on("pointercancel", this.onPointerCancel, this);
 
     this.startRun();
   }
 
   // ── 런 수명주기 ───────────────────────────────────────────────────────────
 
+  startWithRunConfig(runConfig: RunConfig, runStart?: RankedRunStart): void {
+    this.runConfig = runConfig;
+    this.pendingRunStart = runStart;
+    this.restart();
+  }
+
+  private difficultyDef(): { earthEnergy: number; gravitySwell: number } {
+    return this.difficulty[this.runConfig.difficulty] as unknown as { earthEnergy: number; gravitySwell: number };
+  }
+
   private startRun(): void {
-    const diff = this.difficulty[DIFFICULTY] as unknown as { earthEnergy: number; gravitySwell: number };
+    const diff = this.difficultyDef();
     let seedOverride: number | undefined;
     let gaugeOverride: number | undefined;
     let qaPreset: DevQaPreset | undefined;
-    if (import.meta.env.DEV && typeof window !== "undefined") {
+    if (this.runConfig.rules.allowDevQaHarness && import.meta.env.DEV && typeof window !== "undefined") {
       const search = window.location.search;
       seedOverride = readDevNumberParam(search, "seed", { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true });
       gaugeOverride = readDevNumberParam(search, "qaGauge", { min: 0, max: GAUGE_MAX });
@@ -225,16 +338,46 @@ export class GameScene {
     }
     this.objects = new ObjectManager();
     this.spawner = new OrbitSpawner(this.enemies, this.objects);
-    const runStart = this.backend.beginLocalRun(DIFFICULTY, seedOverride ?? (Date.now() >>> 0));
+    const runStart = this.consumeRunStart(seedOverride);
+    this.currentRunStart = runStart;
     this.runSession = new RunSession(runStart);
+    this.telemetrySessionTraceId = createTelemetrySessionTraceId();
+    this.telemetryEventSequence = 0;
+    this.modeRuntimeRules = resolveModeRuntimeRules(this.runConfig);
     this.wave = new WaveGenerator(
       createRng(runStart.seed),
-      { difficulty: runStart.difficulty, bossEveryMs: BOSS_EVERY_MS, bossEnemyType: BOSS_ENEMY_TYPE },
+      {
+        difficulty: runStart.difficulty,
+        spawnIntervalMultiplierForElapsed: (elapsedMs) => modeSpawnIntervalMultiplierAt(this.modeRuntimeRules, elapsedMs) * this.bossWaveSpawnIntervalMultiplier(),
+        enemyWeightBias: this.modeRuntimeRules.enemyWeightBias,
+      },
       this.enemies,
       this.difficulty,
       this.orbits,
       this.waves,
     );
+    this.bossRuntime = new BossEncounterRuntime({
+      enabled: this.runConfig.rules.bossPolicy.enabled,
+      bossEveryMs: this.modeRuntimeRules.periodicBossEveryMs ?? 0,
+      bossEnemyType: this.runConfig.rules.bossPolicy.bossEnemyType,
+      sequence: this.modeRuntimeRules.bossSequence,
+      firstBossDelayMs: this.modeRuntimeRules.bossFirstDelayMs,
+      respawnDelayMs: this.modeRuntimeRules.bossRespawnDelayMs,
+    });
+    const specialObjectPolicy =
+      qaPreset === "special"
+        ? { friendlyRescue: true, energyCapsule: true, satellite: true, empMine: true }
+        : this.runConfig.rules.specialObjectPolicy;
+    this.specialObjects = new SpecialObjectRuntime(createRng(runStart.seed ^ 0x9e3779b9), specialObjectPolicy, {
+      maxActive: qaPreset === "special" ? DEV_QA_SPECIAL_TYPES.length : this.modeRuntimeRules.specialObjectMaxActive,
+      ...(qaPreset === "special"
+        ? {
+            firstSpawnMs: 0,
+            spawnIntervalMs: 1,
+            forcedTypes: DEV_QA_SPECIAL_TYPES,
+          }
+        : {}),
+    });
     this.scoring = new ScoringSystem(this.scoringCfg);
     this.energy = new EnergySystem(diff.earthEnergy);
     this.skills = new SkillSystem(this.skillTable);
@@ -242,11 +385,45 @@ export class GameScene {
     this.elapsedMs = 0;
     this.gravitySlowRemainingMs = 0;
     this.gravitySlowMultiplier = 1;
+    this.deltaShieldRemainingMs = 0;
+    this.deltaShieldAbsorbs = 0;
+    this.deltaShieldDurationMs = 0;
+    this.deltaShieldMaxAbsorbs = 0;
+    this.bossKills = 0;
+    this.defeatedBossIds = [];
+    this.protectedCount = 0;
+    this.failedProtectCount = 0;
+    this.spawnOrdinalSeq = 0;
+    this.activePointerId = null;
+    this.livePoints = [];
+    this.slashTrail.setLive(this.livePoints);
     this.running = true;
     this.enemyHitFeedback.clear();
+    this.bossShardTelegraphs = [];
+    this.enemyTrailLayer.clear();
+    this.bossTelegraphLayer?.clear();
+    this.specialLayer?.clear();
     this.earth.setVisualState("healthy");
     this.resetStrokeState();
     this.spawnDevQaPreset(qaPreset);
+  }
+
+  private consumeRunStart(seedOverride: number | undefined): RankedRunStart {
+    const provided = this.pendingRunStart;
+    this.pendingRunStart = undefined;
+    if (provided) {
+      const publicRanked = validatePublicRankedStart(provided);
+      if (publicRanked.ok) {
+        this.runConfig = buildRunConfig("ranked", {
+          difficulty: provided.difficulty,
+          seed: provided.seed,
+          configVersion: provided.configVersion,
+        });
+        return provided;
+      }
+      return createLocalRunStart(this.runConfig.difficulty, seedOverride ?? provided.seed, this.runConfig.modeId);
+    }
+    return createLocalRunStart(this.runConfig.difficulty, seedOverride ?? this.runConfig.seed, this.runConfig.modeId);
   }
 
   private spawnDevQaPreset(preset: DevQaPreset | undefined): void {
@@ -264,7 +441,7 @@ export class GameScene {
     };
 
     if (preset === "directional") {
-      this.spawner.spawn([
+      this.spawnWithReplay([
         make("directional_comet", 0, 360),
         make("basic_meteor", Math.PI * 0.7, 430),
       ]);
@@ -272,11 +449,49 @@ export class GameScene {
     }
 
     if (preset === "lastSave") {
-      this.spawner.spawn([make("basic_meteor", 0, EARTH_GAMEPLAY_RADIUS * 1.75)]);
+      this.spawnWithReplay([make("basic_meteor", 0, EARTH_GAMEPLAY_RADIUS * 1.75)]);
       return;
     }
 
-    this.spawner.spawn([
+    if (preset === "boss") {
+      this.spawnWithReplay([make("ringed_destroyer", -Math.PI / 2, 390)]);
+      this.bossRuntime.recordBossSpawned("ringed_destroyer");
+      return;
+    }
+
+    if (preset === "blockedBody") {
+      const angle = -Math.PI / 2;
+      const radius = 390;
+      this.spawnWithReplay([make("ringed_destroyer", angle, radius)]);
+      this.bossRuntime.recordBossSpawned("ringed_destroyer");
+      const spawnedBoss = this.objects.getAlive().find((enemy) => enemy.type === "ringed_destroyer" && enemy.boss);
+      if (spawnedBoss) {
+        this.applyHits([
+          {
+            enemyId: spawnedBoss.id,
+            band: "outer",
+            accuracy: "normal",
+            damageMultiplier: 0,
+            blocked: true,
+            blockReason: "boss_body_locked",
+          },
+        ], NORMAL_SLASH_DAMAGE, this.replayNowMs(), "slash");
+      } else {
+        const earth = this.earth.ref();
+        this.triggerBlockedBossBodyFeedback(earth.cx + Math.cos(angle) * radius, earth.cy + Math.sin(angle) * radius);
+      }
+      return;
+    }
+
+    if (preset === "special") {
+      this.specialObjects.next(0, { energy: this.energy.getEnergy(), maxEnergy: this.energy.getMax() });
+      this.specialObjects.next(1, { energy: this.energy.getEnergy(), maxEnergy: this.energy.getMax() });
+      this.specialObjects.next(2, { energy: this.energy.getEnergy(), maxEnergy: this.energy.getMax() });
+      this.specialObjects.next(3, { energy: this.energy.getEnergy(), maxEnergy: this.energy.getMax() });
+      return;
+    }
+
+    this.spawnWithReplay([
       make("small_meteor", 0, 420),
       make("basic_meteor", Math.PI * 0.35, 460),
       make("fast_comet", Math.PI * 0.72, 500),
@@ -287,10 +502,72 @@ export class GameScene {
     ]);
   }
 
+  private withSpawnOrdinals(spawns: SpawnSpec[]): SpawnSpec[] {
+    return spawns
+      .map((spawn, index) => ({ spawn, index }))
+      .sort((a, b) => a.spawn.spawnAtMs - b.spawn.spawnAtMs || a.index - b.index)
+      .map(({ spawn }) => ({ ...spawn, spawnOrdinal: ++this.spawnOrdinalSeq }));
+  }
+
+  private spawnWithReplay(
+    spawns: SpawnSpec[],
+    sourceFor: (spawn: SpawnSpec) => RankedReplaySpawnEvent["source"] = (spawn) => this.replaySpawnSource(spawn),
+    parentSpawnOrdinal?: number,
+  ): SpawnSpec[] {
+    const ordered = this.withSpawnOrdinals(spawns);
+    this.recordReplaySpawns(ordered, sourceFor, parentSpawnOrdinal);
+    this.spawner.spawn(ordered);
+    return ordered;
+  }
+
+  private recordReplaySpawns(
+    spawns: readonly SpawnSpec[],
+    sourceFor: (spawn: SpawnSpec) => RankedReplaySpawnEvent["source"] = (spawn) => this.replaySpawnSource(spawn),
+    parentSpawnOrdinal?: number,
+  ): void {
+    if (this.runConfig.modeId !== "ranked") return;
+    for (const spawn of spawns) {
+      if (spawn.spawnOrdinal == null) continue;
+      this.runSession.recordSpawn({
+        spawnOrdinal: spawn.spawnOrdinal,
+        parentSpawnOrdinal,
+        source: sourceFor(spawn),
+        enemyType: spawn.enemyType,
+        spawnAtMs: spawn.spawnAtMs,
+        startAngleRad: spawn.startAngleRad,
+        startRadius: spawn.startRadius,
+        angularSpeed: spawn.angularSpeed,
+        approachSpeed: spawn.approachSpeed,
+      });
+    }
+  }
+
+  private replaySpawnSource(spawn: SpawnSpec): RankedReplaySpawnEvent["source"] {
+    return this.enemies[spawn.enemyType]?.boss ? "boss" : "wave";
+  }
+
+  private replayNowMs(): number {
+    return Number.isFinite(this.elapsedMs) ? Math.max(0, this.elapsedMs) : 0;
+  }
+
+  private movementDtForEnemy(enemy: EnemyState, movementDtMs: number, aliveBeforeMovement: readonly EnemyState[]): number {
+    const gravitonMultiplier = this.runConfig.modeId === "ranked" ? 1 : gravitonPullMultiplierForEnemy(enemy, aliveBeforeMovement);
+    return movementDtMs * gravitonMultiplier;
+  }
+
+  private recordSkillUse(skillId: SkillId): void {
+    if (Number.isFinite(this.elapsedMs)) {
+      this.runSession.recordSkillUse(skillId, this.replayNowMs());
+      return;
+    }
+    this.runSession.recordSkillUse(skillId);
+  }
+
   private restart(): void {
     for (const [, g] of this.sprites) this.releaseSprite(g);
     this.sprites.clear();
     this.slashTrail.release([]);
+    this.enemyTrailLayer.clear();
     this.result.hide();
     this.destructionBurst.clear();
     this.hitBurst.clear();
@@ -298,20 +575,133 @@ export class GameScene {
     this.startRun();
   }
 
-  private endRun(): void {
+  private endRun(endReason: RunEndReason = "earth_destroyed"): void {
     this.running = false;
     const snap = this.scoring.snapshot();
+    const finalEndReason = this.resolveObjectiveEndReason(endReason, snap);
     const summary = this.runSession.finish({
       survivalMs: this.elapsedMs,
       score: snap.score,
       kills: snap.kills,
+      bossKills: this.bossKills,
+      defeatedBossIds: this.defeatedBossIds,
       maxCombo: snap.maxCombo,
       lastSaveCount: snap.lastSaveCount,
       remainingEnergy: this.energy.getEnergy(),
+      endReason: finalEndReason,
     });
-    Telemetry.track("death", { difficulty: summary.difficulty, score: summary.score, survivalMs: summary.survivalMs });
-    Telemetry.flush();
-    this.result.show(snap, this.elapsedMs);
+    const rankedSubmission =
+      summary.modeId === "ranked"
+        ? validatePublicRankedSubmission(summary, this.currentRunStart, Date.now(), this.runSession.replayTraceSnapshot())
+        : ({ ok: false, reason: "not_ranked_mode" } as const);
+    const rankingEligible = this.runConfig.rules.rankingEligible && rankedSubmission.ok;
+    if (summary.modeId === "ranked") {
+      Telemetry.track("ranked_submission_validation", {
+        ok: rankedSubmission.ok,
+        reason: rankedSubmission.ok ? "ok" : rankedSubmission.reason,
+        configVersion: this.runConfig.configVersion,
+      });
+      if (rankingEligible) {
+        void this.backend
+          .submitRankedRun(summary, this.runSession.replayTraceSnapshot())
+          .then((result) => {
+            Telemetry.track("ranked_submission_result", result);
+            this.flushTelemetry();
+            this.onRankedSubmissionUpdate?.(result.accepted ? "submitted" : "failed");
+          })
+          .catch(() => {
+            Telemetry.track("ranked_submission_result", { accepted: false, reason: "ranked_submit_failed" });
+            this.flushTelemetry();
+            this.onRankedSubmissionUpdate?.("failed");
+          });
+      }
+    }
+    const modeResult: ModeResult = {
+      modeId: summary.modeId,
+      difficulty: this.runConfig.difficulty,
+      endReason: finalEndReason,
+      survivalMs: summary.survivalMs,
+      score: summary.score,
+      kills: summary.kills,
+      bossKills: this.bossKills,
+      defeatedBossIds: [...this.defeatedBossIds],
+      lastSaveCount: summary.lastSaveCount,
+      protectedCount: this.protectedCount,
+      failedProtectCount: this.failedProtectCount,
+      activeStoryStageId: activeStoryStageForConfig(this.runConfig)?.id,
+      activeDailyModifierId: this.runConfig.rules.activeDailyModifierId,
+      objectiveOutcome: this.objectiveOutcome(finalEndReason),
+      rankingSubmissionState: this.rankingSubmissionState(summary.modeId, rankingEligible),
+      maxCombo: summary.maxCombo,
+      remainingEnergy: summary.remainingEnergy,
+      rankingEligible,
+      retryDestination:
+        summary.modeId === "ranked" || finalEndReason === "timer_expired" || finalEndReason === "stage_objective_complete"
+          ? "modeSelect"
+          : "sameRun",
+    };
+    Telemetry.track("death", { modeId: summary.modeId, difficulty: summary.difficulty, score: summary.score, survivalMs: summary.survivalMs, endReason: finalEndReason });
+    this.flushTelemetry();
+    if (this.showResultOverlay) this.result.show(snap, this.elapsedMs);
+    this.onRunEnd?.(modeResult);
+  }
+
+  private flushTelemetry(): void {
+    const events = Telemetry.flush();
+    const telemetryContext = this.platformTelemetryContext;
+    for (const event of events) {
+      void this.backend.trackEvent(event.event, {
+        ...event.props,
+        modeId: event.props.modeId ?? this.runConfig.modeId,
+        difficulty: event.props.difficulty ?? this.runConfig.difficulty,
+        runToken: this.currentRunStart?.runToken,
+        sessionTraceId: this.telemetrySessionTraceId,
+        screen: "game",
+        ...telemetryContext,
+        eventSequence: ++this.telemetryEventSequence,
+      });
+    }
+  }
+
+  private resolveObjectiveEndReason(endReason: RunEndReason, snap = this.scoring.snapshot()): RunEndReason {
+    const objective = evaluateModeObjective(this.runConfig, this.objectiveSnapshot(snap, endReason));
+    if (objective.status === "failed") return objective.endReason;
+    if (objective.status === "passed" && endReason !== "earth_destroyed") return objective.endReason;
+    return endReason;
+  }
+
+  private objectiveOutcome(endReason: RunEndReason): ModeResult["objectiveOutcome"] {
+    if (endReason === "stage_objective_complete" || endReason === "boss_sequence_complete") return "cleared";
+    if (endReason === "daily_challenge_failed" || endReason === "earth_destroyed") return "failed";
+    if (endReason === "timer_expired") return "survived";
+    return undefined;
+  }
+
+  private rankingSubmissionState(modeId: string, rankingEligible: boolean): ModeResult["rankingSubmissionState"] {
+    if (modeId !== "ranked") return "notEligible";
+    if (rankingEligible) return "pending";
+    return "localOnly";
+  }
+
+  private currentObjectiveEndReason(): RunEndReason | null {
+    const objective = evaluateModeObjective(this.runConfig, this.objectiveSnapshot(this.scoring.snapshot()));
+    if (objective.status === "in_progress") return null;
+    return objective.endReason;
+  }
+
+  private objectiveSnapshot(snap = this.scoring.snapshot(), endReason?: RunEndReason): ObjectiveSnapshot {
+    return {
+      elapsedMs: this.elapsedMs,
+      ...(endReason ? { endReason } : {}),
+      kills: snap.kills,
+      maxCombo: snap.maxCombo,
+      lastSaveCount: snap.lastSaveCount,
+      remainingEnergy: this.energy.getEnergy(),
+      skillUse: this.runSession.skillUseSnapshot(),
+      protectedCount: this.protectedCount,
+      failedProtectCount: this.failedProtectCount,
+      bossKills: this.bossKills,
+    };
   }
 
   // ── 포인터 입력 (Instant Judgment) ───────────────────────────────────────
@@ -321,8 +711,18 @@ export class GameScene {
     return { x: local.x, y: local.y, t: performance.now() };
   }
 
+  private pointerId(e: FederatedPointerEvent): number {
+    return e.pointerId ?? 0;
+  }
+
+  private isActivePointer(e: FederatedPointerEvent): boolean {
+    return this.activePointerId !== null && this.activePointerId === this.pointerId(e);
+  }
+
   private onPointerDown(e: FederatedPointerEvent): void {
     if (!this.running) return;
+    if (this.activePointerId !== null) return;
+    this.activePointerId = this.pointerId(e);
     const p = this.toPoint(e);
     this.gesture.onPointerDown(p);
     this.resetStrokeState();
@@ -331,7 +731,7 @@ export class GameScene {
   }
 
   private onPointerMove(e: FederatedPointerEvent): void {
-    if (!this.running || this.livePoints.length === 0) return;
+    if (!this.running || !this.isActivePointer(e) || this.livePoints.length === 0) return;
     const p = this.toPoint(e);
     const prev = this.livePoints[this.livePoints.length - 1]!;
     this.gesture.onPointerMove(p);
@@ -352,12 +752,28 @@ export class GameScene {
   }
 
   private onPointerUp(e: FederatedPointerEvent): void {
-    if (!this.running || this.livePoints.length === 0) return;
-    const earth = this.earth.ref();
-    const g = this.gesture.onPointerUp(this.toPoint(e), earth);
+    if (!this.isActivePointer(e)) return;
+    if (!this.running || this.livePoints.length === 0) {
+      this.activePointerId = null;
+      return;
+    }
+    try {
+      const earth = this.earth.ref();
+      const g = this.gesture.onPointerUp(this.toPoint(e), earth);
+      this.livePoints = [];
+      this.slashTrail.release(g.points);
+      this.resolveInput(g.points, earth);
+      this.resetStrokeState();
+    } finally {
+      this.activePointerId = null;
+    }
+  }
+
+  private onPointerCancel(e: FederatedPointerEvent): void {
+    if (!this.isActivePointer(e)) return;
+    this.activePointerId = null;
     this.livePoints = [];
-    this.slashTrail.release(g.points);
-    this.resolveInput(g.points, earth);
+    this.slashTrail.setLive(this.livePoints);
     this.resetStrokeState();
   }
 
@@ -365,36 +781,114 @@ export class GameScene {
   private resolveInput(points: Point[], earth: EarthRef): void {
     const committedMovement = pathLength(points) >= MISS_COMMIT_DISTANCE_PX;
     const gesture = this.gestureResultFromPoints(points, earth);
-    const act = !this.strokeHadHit ? this.skills.trySolarLance(gesture, { earth, gauge: this.gauge, screenShortSide: BASE_WIDTH }) : null;
+    const act = this.skillEnabled("solar_lance") ? this.skills.trySolarLance(gesture, { earth, gauge: this.gauge, screenShortSide: BASE_WIDTH }) : null;
 
     if (act) {
       if (!this.skillTable._debug.infiniteGauge) {
         this.gauge = Math.max(0, this.gauge - this.skillTable.solar_lance.gaugeCost);
       }
-      this.runSession.recordSkillUse("solar_lance");
+      this.recordSkillUse("solar_lance");
       Telemetry.track("skill_fire", { skillId: "solar_lance" });
       this.laser.fire(act.vfxLine); // 연출 — 판정 불변
       const lanceKills = this.applyHits(
-        resolveLineHits(act.vfxLine, this.objects.getAlive(), earth.cx, earth.cy, earth.r, this.zones, {
+        this.applyBossWeakPointAccuracy(resolveLineHits(act.vfxLine, this.objects.getAlive(), earth.cx, earth.cy, earth.r, this.zones, {
           hitRadiusInflatePx: SOLAR_LANCE_HIT_INFLATE_PX,
           hitRadiusScaleForEnemy: (enemy) => this.enemyVisualScale(enemy),
-        }),
+        }), act.vfxLine, earth),
         this.skillTable.solar_lance.hitDamage ?? NORMAL_SLASH_DAMAGE,
-        points[points.length - 1]?.t ?? performance.now(),
+        this.replayNowMs(),
+        "solar_lance",
+        act.vfxLine,
+        "solar_lance",
       );
       this.commitKills(lanceKills, earth, false);
+      this.resolveSpecialLine(act.vfxLine);
       this.objects.prune();
       return;
     }
 
-    const slow = !this.strokeHadHit ? this.skills.tryGravitySlow(gesture, { earth, gauge: this.gauge, screenShortSide: BASE_WIDTH }) : null;
+    const nova = this.skillEnabled("nova_pulse") ? (this.skills.tryNovaPulse?.(gesture, { earth, gauge: this.gauge, screenShortSide: BASE_WIDTH }) ?? null) : null;
+    if (nova) {
+      if (!this.skillTable._debug.infiniteGauge) {
+        this.gauge = Math.max(0, this.gauge - this.skillTable.nova_pulse.gaugeCost);
+      }
+      this.recordSkillUse("nova_pulse");
+      Telemetry.track("skill_fire", { skillId: "nova_pulse" });
+      const kills = this.applyHits(this.resolveNovaPulseHits(earth, nova.radiusPx, nova.pushPx, nova.targetCap), nova.damage, this.replayNowMs(), "skill", undefined, "nova_pulse");
+      this.commitKills(kills, earth, false);
+      this.destructionBurst.spawn(earth.cx, earth.cy, {
+        color: 0x93f7ff,
+        secondaryColor: 0xffffff,
+        radius: nova.radiusPx,
+        particleCount: 34,
+        lifeMs: 620,
+      });
+      this.hitBurst.spawn(earth.cx, earth.cy, t("skill.nova_pulse"), 0x93f7ff, nova.radiusPx, false, {
+        labelScale: 0.9,
+        ringWidth: 5,
+        lifeMs: 640,
+      });
+      this.hud.flashBanner(t("skill.nova_pulse"), 0x93f7ff);
+      this.objects.prune();
+      return;
+    }
+
+    const orbital = this.skillEnabled("orbital_cut") ? (this.skills.tryOrbitalCut?.(gesture, { earth, gauge: this.gauge, screenShortSide: BASE_WIDTH }) ?? null) : null;
+    if (orbital) {
+      if (!this.skillTable._debug.infiniteGauge) {
+        this.gauge = Math.max(0, this.gauge - this.skillTable.orbital_cut.gaugeCost);
+      }
+      this.recordSkillUse("orbital_cut");
+      Telemetry.track("skill_fire", { skillId: "orbital_cut" });
+      const hits = this.resolveOrbitalCutHits(earth, orbital.radiusPx);
+      const kills = this.applyHits(hits, orbital.damage, this.replayNowMs(), "skill", undefined, "orbital_cut");
+      this.commitKills(kills, earth, false);
+      this.destructionBurst.spawn(earth.cx, earth.cy, {
+        color: 0xffc14d,
+        secondaryColor: 0xffffff,
+        radius: orbital.radiusPx,
+        particleCount: 42,
+        lifeMs: 760,
+      });
+      this.hitBurst.spawn(earth.cx, earth.cy, t("skill.orbital_cut"), 0xffc14d, orbital.radiusPx, false, {
+        labelScale: 0.95,
+        ringWidth: 7,
+        lifeMs: 700,
+      });
+      this.hud.flashBanner(t("skill.orbital_cut"), 0xffc14d);
+      this.objects.prune();
+      return;
+    }
+
+    const shield = this.skillEnabled("delta_shield") ? (this.skills.tryDeltaShield?.(gesture, { earth, gauge: this.gauge, screenShortSide: BASE_WIDTH }) ?? null) : null;
+    if (shield) {
+      if (!this.skillTable._debug.infiniteGauge) {
+        this.gauge = Math.max(0, this.gauge - this.skillTable.delta_shield.gaugeCost);
+      }
+      this.deltaShieldRemainingMs = shield.durationMs;
+      this.deltaShieldAbsorbs = shield.absorbCount;
+      this.deltaShieldDurationMs = shield.durationMs;
+      this.deltaShieldMaxAbsorbs = shield.absorbCount;
+      this.recordSkillUse("delta_shield");
+      Telemetry.track("skill_fire", { skillId: "delta_shield" });
+      this.hitBurst.spawn(earth.cx, earth.cy, t("skill.delta_shield"), 0x93c5fd, EARTH_BODY_RADIUS * 2.1, false, {
+        labelScale: 0.95,
+        ringWidth: 5,
+        lifeMs: 760,
+      });
+      this.hud.flashBanner(t("skill.delta_shield"), 0x93c5fd);
+      this.objects.prune();
+      return;
+    }
+
+    const slow = this.skillEnabled("gravity_slow") ? this.skills.tryGravitySlow(gesture, { earth, gauge: this.gauge, screenShortSide: BASE_WIDTH }) : null;
     if (slow) {
       if (!this.skillTable._debug.infiniteGauge) {
         this.gauge = Math.max(0, this.gauge - this.skillTable.gravity_slow.gaugeCost);
       }
       this.gravitySlowRemainingMs = slow.durationMs;
       this.gravitySlowMultiplier = slow.slowMultiplier;
-      this.runSession.recordSkillUse("gravity_slow");
+      this.recordSkillUse("gravity_slow");
       Telemetry.track("skill_fire", { skillId: "gravity_slow" });
       this.hitBurst.spawn(earth.cx, earth.cy, t("skill.gravity_slow"), 0x7dd3fc, EARTH_BODY_RADIUS * 1.8, false, {
         labelScale: 0.95,
@@ -410,6 +904,7 @@ export class GameScene {
       this.commitKills(this.strokeKills, earth, true);
     } else if (committedMovement && !this.strokeHadHit) {
       this.scoring.onMiss(); // 탭/짧은 입력은 neutral, 의미 있는 빈 슬래시만 콤보 끊김.
+      this.runSession.recordComboBreak("miss", this.replayNowMs());
       Telemetry.track("combo_break", { reason: "miss" });
     }
     this.objects.prune();
@@ -424,19 +919,21 @@ export class GameScene {
   }
 
   private resolveLiveSlashSegment(segment: Segment, earth: EarthRef): void {
+    if (this.resolveSpecialSegment(segment)) return;
     const hits = resolveLiveSegmentHits(segment, this.objects.getAlive(), earth.cx, earth.cy, earth.r, this.zones, {
       minSegmentLengthPx: LIVE_SEGMENT_MIN_LENGTH_PX,
       hitRadiusInflatePx: NORMAL_SLASH_HIT_INFLATE_PX,
       hitRadiusScaleForEnemy: (enemy) => this.enemyVisualScale(enemy),
       canHitEnemy: (enemy) => this.strokeHitTracker.canHit(enemy.id, segment.b.t),
     });
+    this.applyBossWeakPointAccuracy(hits, segment, earth);
     this.spawnDirectionalRejectFeedback(segment, earth);
     if (hits.length === 0) {
       this.updateStrokeHitRearm(segment);
       return;
     }
 
-    const kills = this.applyHits(hits, NORMAL_SLASH_DAMAGE, segment.b.t);
+    const kills = this.applyHits(hits, NORMAL_SLASH_DAMAGE, this.replayNowMs(), "slash", segment);
     for (const kill of kills) {
       this.spawnKillFeedback(kill);
     }
@@ -459,11 +956,16 @@ export class GameScene {
       Telemetry.track("directional_reject", { enemyType: enemy.type, band: reject.band });
       const pos = enemyXY(enemy);
       this.destructionBurst.spawn(pos.x, pos.y, {
-        color: 0x64748b,
+        color: 0xff5a66,
         secondaryColor: 0x8ff3ff,
         radius: Math.max(28, enemy.radiusPx * this.enemyVisualScale(enemy) * 0.52),
-        particleCount: 7,
-        lifeMs: 240,
+        particleCount: 10,
+        lifeMs: 280,
+      });
+      this.hitBurst.spawn(pos.x, pos.y, t("directional.wrongAngle"), 0x8ff3ff, Math.max(34, enemy.radiusPx * this.enemyVisualScale(enemy) * 0.72), false, {
+        labelScale: 0.72,
+        ringWidth: 4,
+        lifeMs: 420,
       });
     }
   }
@@ -478,31 +980,182 @@ export class GameScene {
   }
 
   private enemyVisualScale(enemy: EnemyState): number {
-    const diff = this.difficulty[DIFFICULTY] as unknown as { gravitySwell: number };
+    const diff = this.difficultyDef();
     return depthScale(enemy.radius, EARTH_GAMEPLAY_RADIUS, diff.gravitySwell);
   }
 
-  private applyHits(hits: HitResult[], damage: number, hitAtMs = performance.now()): PendingKill[] {
+  private resolveOrbitalCutHits(earth: EarthRef, radiusPx: number): HitResult[] {
+    const hits: HitResult[] = [];
+    for (const enemy of this.objects.getAlive()) {
+      const pos = enemyXY(enemy);
+      const visualRadius = enemy.radiusPx * this.enemyVisualScale(enemy);
+      if (distance(pos.x, pos.y, earth.cx, earth.cy) <= radiusPx + visualRadius) {
+        hits.push({
+          enemyId: enemy.id,
+          band: distanceBand(enemy.radius, earth.r, this.zones),
+          accuracy: "normal",
+        });
+      }
+    }
+    return hits;
+  }
+
+  private resolveNovaPulseHits(earth: EarthRef, radiusPx: number, pushPx: number, targetCap: number): HitResult[] {
+    const hits: HitResult[] = [];
+    for (const enemy of this.objects.getAlive()) {
+      const pos = enemyXY(enemy);
+      const visualRadius = enemy.radiusPx * this.enemyVisualScale(enemy);
+      if (distance(pos.x, pos.y, earth.cx, earth.cy) > radiusPx + visualRadius) continue;
+      hits.push({
+        enemyId: enemy.id,
+        band: distanceBand(enemy.radius, earth.r, this.zones),
+        accuracy: "normal",
+      });
+      if (!enemy.boss) enemy.radius += pushPx;
+      if (hits.length >= targetCap) break;
+    }
+    return hits;
+  }
+
+  private resolveSpecialLine(line: Segment): boolean {
+    if (!this.specialObjects) return false;
+    let consumed = false;
+    for (const object of this.specialObjects.getAlive()) {
+      if (!segmentIntersectsCircle(line, object.x, object.y, object.radiusPx)) continue;
+      consumed = this.applySpecialHit(object) || consumed;
+    }
+    return consumed;
+  }
+
+  private resolveSpecialSegment(segment: Segment): boolean {
+    if (!this.specialObjects) return false;
+    if (Math.hypot(segment.b.x - segment.a.x, segment.b.y - segment.a.y) < LIVE_SEGMENT_MIN_LENGTH_PX) return false;
+    for (const object of this.specialObjects.getAlive()) {
+      if (!segmentIntersectsCircle(segment, object.x, object.y, object.radiusPx)) continue;
+      return this.applySpecialHit(object);
+    }
+    return false;
+  }
+
+  private applySpecialHit(object: SpecialObjectState): boolean {
+    const effect = this.specialObjects.applyHit(object.id);
+    if (!effect) return false;
+    return this.applySpecialObjectEffect(effect, object.x, object.y, object.type);
+  }
+
+  private applySpecialObjectEffect(effect: SpecialObjectHitEffect, x: number, y: number, type?: SpecialObjectType): boolean {
+    if (effect.kind === "penalty") {
+      if (type && isProtectObjectiveObject(type)) this.failedProtectCount += 1;
+      const result = this.energy.applyDamage(effect.damage);
+      if (effect.comboBreak) this.scoring.onMiss();
+      this.earth.setVisualState(this.energy.visualState());
+      this.hitBurst.spawn(x, y, t(specialPenaltyLabelKey(type)), 0xff5a66, 96, false, { labelScale: 0.8, ringWidth: 4, lifeMs: 520 });
+      if (result.gameOver) {
+        this.endRun("earth_destroyed");
+        return true;
+      }
+      return true;
+    }
+
+    if (effect.heal > 0) this.energy.heal(effect.heal);
+    if (effect.score > 0) this.scoring.addBonus(effect.score);
+    if (effect.gauge > 0) this.gauge = Math.min(GAUGE_MAX, this.gauge + effect.gauge);
+    if (effect.slowMs > 0) {
+      this.gravitySlowRemainingMs = Math.max(this.gravitySlowRemainingMs, effect.slowMs);
+      this.gravitySlowMultiplier = Math.min(this.gravitySlowMultiplier, 0.55);
+    }
+    this.earth.setVisualState(this.energy.visualState());
+    this.hitBurst.spawn(x, y, t(specialBenefitLabelKey(type)), 0x7dd3fc, 92, false, { labelScale: 0.8, ringWidth: 4, lifeMs: 520 });
+    return true;
+  }
+
+  private triggerBlockedBossBodyFeedback(x: number, y: number): void {
+    this.hud.flashBanner(t("boss.weakPointOnly"), 0xffc14d);
+    this.hud.flashBlockedWeakPoint(t("boss.weakPointOnly"), t("boss.weakPointHint"));
+    this.hitBurst.spawn(x, y, t("boss.weakPointOnly"), 0xffc14d, 140, false, { labelScale: 0.78, ringWidth: 5, lifeMs: 560 });
+  }
+
+  private applyHits(
+    hits: HitResult[],
+    damage: number,
+    hitAtMs = this.replayNowMs(),
+    source: "slash" | "solar_lance" | "skill" = "slash",
+    segment?: Segment,
+    skillId?: SkillId,
+  ): PendingKill[] {
     const killed: PendingKill[] = [];
     for (const h of hits) {
+      if (h.blocked) {
+        this.strokeHadHit = true;
+        this.strokeHitTracker.recordHit(h.enemyId, hitAtMs);
+        this.triggerEnemyHitFeedback(h.enemyId);
+        if (h.blockReason === "boss_body_locked") {
+          const enemy = this.objects.getAlive?.().find((candidate) => candidate.id === h.enemyId);
+          const pos = enemy ? enemyXY(enemy) : null;
+          this.triggerBlockedBossBodyFeedback(pos?.x ?? 540, pos?.y ?? 900);
+        }
+        continue;
+      }
       this.strokeHadHit = true;
       this.strokeHitTracker.recordHit(h.enemyId, hitAtMs);
-      const result = this.objects.applyDamage(h.enemyId, damage);
+      const hitDamage = Math.max(1, Math.ceil(damage * (h.damageMultiplier ?? 1)));
+      const result = this.objects.applyDamage(h.enemyId, hitDamage);
       if (result.enemy) this.triggerEnemyHitFeedback(h.enemyId);
+      if (result.enemy?.spawnOrdinal != null) {
+        this.runSession.recordHit({
+          spawnOrdinal: result.enemy.spawnOrdinal,
+          hitAtMs,
+          band: h.band,
+          accuracy: h.accuracy,
+          damage: result.absorbed ? 0 : hitDamage,
+          absorbed: result.absorbedBy,
+          damageMultiplier: h.damageMultiplier,
+          source,
+          skillId,
+          segment: segment ? cloneSegment(segment) : undefined,
+        });
+      }
       if (!result.killed || !result.enemy) continue;
+
+      const splitSpawns = splitSpawnSpecsForEnemy(result.enemy, hitAtMs);
+      if (splitSpawns.length > 0) {
+        const orderedSplitSpawns = this.spawnWithReplay(splitSpawns, () => "split", result.enemy.spawnOrdinal);
+        for (const spawn of orderedSplitSpawns) {
+          Telemetry.track("spawn", { enemyType: spawn.enemyType, modeId: this.runConfig.modeId, difficulty: this.runConfig.difficulty, source: "split" });
+        }
+      }
 
       const pos = enemyXY(result.enemy);
       killed.push({
         hit: h,
+        damage: hitDamage,
         score: result.enemy.score,
+        spawnOrdinal: result.enemy.spawnOrdinal,
         type: result.enemy.type,
         x: pos.x,
         y: pos.y,
         hitAtMs,
+        boss: result.enemy.boss,
+        source,
+        skillId,
+        segment,
       });
       this.removeSprite(h.enemyId);
     }
     return killed;
+  }
+
+  private applyBossWeakPointAccuracy(hits: HitResult[], segment: Segment, earth: EarthRef): HitResult[] {
+    for (const hit of hits) {
+      const enemy = this.objects.getAlive().find((candidate) => candidate.id === hit.enemyId);
+      if (!enemy?.boss) continue;
+      const weak = resolveBossWeakPointHit(segment, enemy, earth.cx, earth.cy, this.enemyVisualScale(enemy));
+      hit.accuracy = weak.accuracy;
+      hit.damageMultiplier = weak.damageMultiplier;
+      hit.blocked = weak.blocked;
+      hit.blockReason = weak.blockReason;
+    }
+    return hits;
   }
 
   private commitKills(kills: PendingKill[], earth: EarthRef, visualsAlreadyShown: boolean): void {
@@ -511,6 +1164,21 @@ export class GameScene {
     const scoreById = new Map(kills.map((k) => [k.hit.enemyId, k.score] as const));
     const typeById = new Map(kills.map((k) => [k.hit.enemyId, k.type] as const));
     const groups = groupByComboTimeout(kills, this.scoringCfg.comboChainTimeoutMs ?? 650);
+    for (const kill of kills) {
+      if (kill.spawnOrdinal != null) {
+        this.runSession.recordKill({
+          spawnOrdinal: kill.spawnOrdinal,
+          hitAtMs: kill.hitAtMs,
+          band: kill.hit.band,
+          accuracy: kill.hit.accuracy,
+          damageMultiplier: kill.hit.damageMultiplier,
+          damage: kill.damage,
+          source: kill.source,
+          skillId: kill.skillId,
+          segment: kill.segment ? cloneSegment(kill.segment) : undefined,
+        });
+      }
+    }
 
     if (!visualsAlreadyShown) {
       for (const kill of kills) this.spawnKillFeedback(kill);
@@ -523,6 +1191,12 @@ export class GameScene {
         (id) => typeById.get(id) ?? "",
         group[group.length - 1]?.hitAtMs,
       );
+      this.bossRuntime?.recordThreatPressure({
+        kills: group.length,
+        combo: res.combo,
+        lastSave: res.lastSave,
+        bossWeakHits: group.filter((kill) => kill.hit.accuracy === "bossWeak").length,
+      });
       this.gauge = Math.min(GAUGE_MAX, this.gauge + res.gauge);
 
       const tier = multiCutTier(group.length);
@@ -543,9 +1217,39 @@ export class GameScene {
         });
         this.earth.flashLastSave();
         this.hud.flashBanner(lastSaveLabel(), 0x3fd8ff);
-        Telemetry.track("last_save", { difficulty: DIFFICULTY });
+        Telemetry.track("last_save", { modeId: this.runConfig.modeId, difficulty: this.runConfig.difficulty });
       }
     }
+
+    for (const kill of kills) {
+      if (!kill.boss) continue;
+      this.recordBossDefeat(kill.type);
+    }
+  }
+
+  private recordBossDefeat(enemyType: string): void {
+    this.bossKills += 1;
+    if (!this.defeatedBossIds.includes(enemyType)) this.defeatedBossIds.push(enemyType);
+    this.bossRuntime?.recordBossDefeated(enemyType, this.elapsedMs);
+  }
+
+  private applyDeltaShieldAbsorb(en: EnemyState): void {
+    this.deltaShieldAbsorbs -= 1;
+    Telemetry.track("delta_shield_absorb", { enemyType: en.type, remaining: this.deltaShieldAbsorbs, boss: Boolean(en.boss) });
+    const pos = enemyXY(en);
+    this.hitBurst.spawn(pos.x, pos.y, t("skill.delta_shield"), 0x93c5fd, Math.max(48, en.radiusPx * this.enemyVisualScale(en)), false, {
+      labelScale: en.boss ? 0.78 : 0.7,
+      ringWidth: en.boss ? 6 : 4,
+      lifeMs: en.boss ? 560 : 420,
+    });
+    if (en.boss) {
+      en.radius = Math.max(en.radius, EARTH_GAMEPLAY_RADIUS * 2.35);
+      this.triggerEnemyHitFeedback(en.id);
+    } else {
+      this.objects.kill(en.id);
+      this.removeSprite(en.id);
+    }
+    if (this.deltaShieldAbsorbs <= 0) this.deltaShieldRemainingMs = 0;
   }
 
   private spawnKillFeedback(kill: PendingKill): void {
@@ -559,6 +1263,7 @@ export class GameScene {
     this.hitBurst.spawn(kill.x, kill.y, multiplierLabel(feedback.multiplier), feedback.color, feedback.radius, feedback.isLastSave, {
       labelScale: feedback.labelScale,
       ringWidth: feedback.ringWidth,
+      lifeMs: feedback.lifeMs,
     });
   }
 
@@ -578,8 +1283,8 @@ export class GameScene {
   }
 
   private shouldReserveStrokeForSolarLance(points: Point[], earth: EarthRef): boolean {
+    if (!this.skillEnabled("solar_lance")) return false;
     return shouldReserveLiveSlashForSolarLance(points, earth, {
-      strokeHadHit: this.strokeHadHit,
       skillReady: this.skills.isReady("solar_lance"),
       gauge: this.gauge,
       gaugeCost: this.skillTable.solar_lance.gaugeCost,
@@ -589,8 +1294,8 @@ export class GameScene {
   }
 
   private shouldReserveStrokeForGravitySlow(points: Point[], earth: EarthRef): boolean {
+    if (!this.skillEnabled("gravity_slow")) return false;
     return shouldReserveLiveSlashForGravitySlow(points, earth, {
-      strokeHadHit: this.strokeHadHit,
       skillReady: this.skills.isReady("gravity_slow"),
       gauge: this.gauge,
       gaugeCost: this.skillTable.gravity_slow.gaugeCost,
@@ -661,6 +1366,46 @@ export class GameScene {
     this.drawEnemyOverlay(node.overlay, en);
   }
 
+  private drawEnemyTrail(g: Graphics, en: EnemyState, pos: { x: number; y: number }, motion: EnemySpriteMotion, shakeScale: number, hitFeedback?: EnemyHitFeedbackState): void {
+    const style = enemyVisualStyle(en.type);
+    const scale = this.enemyVisualScale(en) * motion.visualScale * shakeScale;
+    const visualRadius = en.radiusPx * scale;
+    const travel = enemyTravelAngleRad(en);
+    const back = travel + Math.PI;
+    const alpha = Math.min(en.boss ? 0.16 : 0.18, motion.trailAlpha * 0.22);
+    const glowAlpha = Math.min(en.boss ? 0.12 : 0.15, motion.glowAlpha);
+
+    if (style.shape === "comet") {
+      const len = motion.trailLengthPx * scale;
+      const startX = pos.x + Math.cos(back) * visualRadius * 0.35;
+      const startY = pos.y + Math.sin(back) * visualRadius * 0.35;
+      const endX = pos.x + Math.cos(back) * len;
+      const endY = pos.y + Math.sin(back) * len;
+      g.moveTo(startX, startY).lineTo(endX, endY).stroke({
+        width: Math.max(5, visualRadius * 0.46),
+        color: style.rim,
+        alpha,
+        cap: "round",
+      });
+      g.moveTo(pos.x, pos.y).lineTo(endX, endY).stroke({
+        width: Math.max(2, visualRadius * 0.15),
+        color: style.sparkleColor,
+        alpha: Math.min(0.2, alpha + 0.04),
+        cap: "round",
+      });
+    }
+
+    const hitT = hitFeedback ? 1 - Math.min(1, hitFeedback.elapsedMs / hitFeedback.durationMs) : 0;
+    const ringAlpha = Math.min(0.22, glowAlpha + hitT * 0.18);
+    if (ringAlpha > 0.03) {
+      g.circle(pos.x, pos.y, visualRadius * (1.04 + hitT * 0.18)).stroke({
+        width: Math.max(2, visualRadius * (en.boss ? 0.045 : 0.035)),
+        color: hitFeedback ? style.sparkleColor : style.rim,
+        alpha: ringAlpha,
+      });
+    }
+  }
+
   private drawEnemyOverlay(g: Graphics, en: EnemyState, hitFeedback?: EnemyHitFeedbackState): void {
     g.clear();
     const r = en.radiusPx;
@@ -669,6 +1414,24 @@ export class GameScene {
       g.circle(0, 0, r + 14).stroke({ width: 10, color: style.sparkleColor, alpha: 0.66 });
       g.circle(0, 0, r + 30).stroke({ width: 4, color: 0xfef3c7, alpha: 0.34 });
       g.circle(0, 0, r * 0.28).stroke({ width: 8, color: 0xffffff, alpha: 0.22 });
+      for (const weak of bossWeakPointLocalCircles(en, this.enemyVisualScale(en))) {
+        g.circle(weak.x, weak.y, weak.r + 8).stroke({ width: Math.max(3, weak.strokeWidth + 2), color: weak.haloColor, alpha: 0.34 });
+        g.circle(weak.x, weak.y, weak.r + 4).stroke({ width: weak.strokeWidth, color: weak.color, alpha: 0.78 });
+        if (weak.markerKind === "ring_node") {
+          g.circle(weak.x, weak.y, Math.max(4, weak.r * 0.38)).stroke({ width: Math.max(2, weak.strokeWidth * 0.48), color: weak.color, alpha: 0.9 });
+        } else if (weak.markerKind === "body_crack") {
+          const crack = Math.max(8, weak.r * 0.8);
+          g.moveTo(weak.x - crack * 0.8, weak.y - crack * 0.18)
+            .lineTo(weak.x - crack * 0.15, weak.y + crack * 0.16)
+            .lineTo(weak.x + crack * 0.18, weak.y - crack * 0.2)
+            .lineTo(weak.x + crack * 0.82, weak.y + crack * 0.18)
+            .stroke({ width: Math.max(3, weak.strokeWidth * 0.55), color: weak.color, alpha: 0.92, cap: "round" });
+          g.circle(weak.x, weak.y, Math.max(5, weak.r * 0.34)).fill({ color: weak.color, alpha: weak.fillAlpha });
+        } else {
+          g.circle(weak.x, weak.y, Math.max(5, weak.r * 0.48)).fill({ color: weak.color, alpha: weak.fillAlpha });
+          g.circle(weak.x, weak.y, Math.max(8, weak.r * 0.82)).stroke({ width: Math.max(2, weak.strokeWidth * 0.4), color: 0xffffff, alpha: 0.44 });
+        }
+      }
     }
     drawDirectionalGuide(g, en, en.directional ? requiredDirectionalSlashAngleRad(en) : undefined, false);
 
@@ -701,8 +1464,17 @@ export class GameScene {
 
     if (hitFeedback) {
       const t = 1 - Math.min(1, hitFeedback.elapsedMs / hitFeedback.durationMs);
-      g.circle(0, 0, r + 10 + t * (en.boss ? 28 : 14)).stroke({ width: en.boss ? 10 : 6, color: 0xffffff, alpha: t * (en.boss ? 0.62 : 0.42) });
-      g.circle(0, 0, Math.max(10, r * 0.22 + t * r * 0.18)).stroke({ width: en.boss ? 7 : 4, color: style.sparkleColor, alpha: t * 0.48 });
+      g.circle(0, 0, r + 10 + t * (en.boss ? 28 : 14)).stroke({ width: en.boss ? 10 : 6, color: 0xffffff, alpha: t * (en.boss ? 0.62 : 0.46) });
+      g.circle(0, 0, Math.max(10, r * 0.22 + t * r * 0.18)).stroke({ width: en.boss ? 7 : 4, color: style.sparkleColor, alpha: t * 0.54 });
+      const sparkCount = en.boss ? 8 : 5;
+      for (let i = 0; i < sparkCount; i += 1) {
+        const angle = i * ((Math.PI * 2) / sparkCount) + en.id * 0.37;
+        const inner = r * (0.42 + t * 0.08);
+        const outer = r * (0.74 + t * 0.18);
+        g.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner)
+          .lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer)
+          .stroke({ width: Math.max(2, r * 0.035), color: style.sparkleColor, alpha: t * 0.5, cap: "round" });
+      }
     }
   }
 
@@ -711,38 +1483,97 @@ export class GameScene {
   update(dtMs: number): void {
     if (this.running) {
       this.elapsedMs += dtMs;
+      const objectiveEndReason = this.currentObjectiveEndReason();
+      if (objectiveEndReason) {
+        this.endRun(objectiveEndReason);
+        return;
+      }
       this.skills.tick(dtMs);
       if (this.gravitySlowRemainingMs > 0) {
         this.gravitySlowRemainingMs = Math.max(0, this.gravitySlowRemainingMs - dtMs);
         if (this.gravitySlowRemainingMs === 0) this.gravitySlowMultiplier = 1;
       }
+      if (this.deltaShieldRemainingMs > 0) {
+        this.deltaShieldRemainingMs = Math.max(0, this.deltaShieldRemainingMs - dtMs);
+        if (this.deltaShieldRemainingMs === 0) this.deltaShieldAbsorbs = 0;
+      }
+
+      if (this.runConfig.rules.durationLimitMs !== null && this.elapsedMs >= this.runConfig.rules.durationLimitMs) {
+        this.endRun("timer_expired");
+        return;
+      }
 
       // spawn
       const spawns = this.wave.next(this.elapsedMs);
-      for (const spawn of spawns) Telemetry.track("spawn", { enemyType: spawn.enemyType, difficulty: DIFFICULTY });
-      this.spawner.spawn(spawns);
+      const bossRequests = this.bossRuntime.nextSpawns(this.elapsedMs, this.objects.getAlive().some((enemy) => enemy.boss));
+      const bossSpawns = bossRequests.map((request) => this.bossSpawnSpec(request.enemyType, request.spawnAtMs)).filter((spawn): spawn is SpawnSpec => Boolean(spawn));
+      const orderedSpawns = this.spawnWithReplay([...spawns, ...bossSpawns]);
+      for (const spawn of orderedSpawns) Telemetry.track("spawn", { enemyType: spawn.enemyType, modeId: this.runConfig.modeId, difficulty: this.runConfig.difficulty });
+      for (const spawn of orderedSpawns.filter((spawn) => this.enemies[spawn.enemyType]?.boss)) this.bossRuntime.recordBossSpawned(spawn.enemyType);
+
+      const activeBoss = this.objects.getAlive().find((enemy) => enemy.boss);
+      if (activeBoss) {
+        for (const event of this.bossRuntime.nextPhaseActionEvents(activeBoss, this.elapsedMs)) {
+          this.spawnBossShardEvent(event, activeBoss);
+        }
+      }
+      for (const event of this.bossRuntime.nextShardEvents(activeBoss, this.elapsedMs)) {
+        if (event.kind === "warning") {
+          const telegraph = activeBoss ? buildBossShardTelegraph(event, activeBoss, this.elapsedMs) : undefined;
+          if (telegraph) this.bossShardTelegraphs.push(telegraph);
+          this.hud.flashBanner(t("boss.shardWarning"), 0xffc14d);
+          continue;
+        }
+        if (!activeBoss) continue;
+        this.spawnBossShardEvent(event, activeBoss);
+      }
+
+      this.specialObjects.next(this.elapsedMs, { energy: this.energy.getEnergy(), maxEnergy: this.energy.getMax() });
+      this.specialObjects.step(this.elapsedMs);
+      for (const reward of this.specialObjects.expire(this.elapsedMs)) {
+        if (isProtectObjectiveObject(reward.type)) this.protectedCount += 1;
+        this.scoring.addBonus(reward.score);
+        this.gauge = Math.min(GAUGE_MAX, this.gauge + reward.gauge);
+        if (reward.heal && reward.heal > 0) {
+          this.energy.heal(reward.heal);
+          this.earth.setVisualState(this.energy.visualState());
+        }
+        this.hud.flashBanner(t(specialRewardLabelKey(reward.type)), 0x7dd3fc);
+      }
 
       // movement + 지구 충돌
-      const diff = this.difficulty[DIFFICULTY] as unknown as { gravitySwell: number };
+      const diff = this.difficultyDef();
       const movementDtMs = this.gravitySlowRemainingMs > 0 ? dtMs * this.gravitySlowMultiplier : dtMs;
-      for (const en of this.objects.getAlive()) {
-        stepEnemy(en, movementDtMs);
+      const aliveBeforeMovement = this.objects.getAlive();
+      for (const en of aliveBeforeMovement) {
+        stepEnemy(en, this.movementDtForEnemy(en, movementDtMs, aliveBeforeMovement));
         if (enemyTouchesImpactZone(en.radius, en.radiusPx, EARTH_GAMEPLAY_RADIUS, this.zones, diff.gravitySwell, en.earthImpactRadiusPx)) {
+          if (this.deltaShieldRemainingMs > 0 && this.deltaShieldAbsorbs > 0) {
+            this.applyDeltaShieldAbsorb(en);
+            continue;
+          }
           const r = this.energy.applyDamage(en.damage);
           this.scoring.onMiss(); // 지구 피격 = 콤보 끊김
+          this.runSession.recordComboBreak("earth_hit", this.replayNowMs());
           Telemetry.track("combo_break", { reason: "earth_hit" });
           this.objects.kill(en.id);
           this.removeSprite(en.id);
           this.earth.setVisualState(this.energy.visualState());
           if (r.gameOver) {
             this.objects.prune();
-            this.endRun();
+            this.endRun("earth_destroyed");
             break;
           }
         }
       }
       this.objects.prune();
+      if (this.modeRuntimeRules.endOnBossSequenceComplete && this.bossRuntime.sequenceComplete()) {
+        this.endRun("boss_sequence_complete");
+        return;
+      }
       this.updateEnemyHitFeedback(dtMs);
+      this.enemyTrailLayer.clear();
+      this.drawBossShardTelegraphs();
 
       // render 적 스프라이트
       for (const en of this.objects.getAlive()) {
@@ -757,15 +1588,25 @@ export class GameScene {
         }
         const pos = enemyXY(en);
         const hitFeedback = this.enemyHitFeedback.get(en.id);
+        const motion = enemySpriteMotion(en, this.elapsedMs);
         const shake = hitFeedback
           ? enemyHitShakeOffset(en.id, hitFeedback.elapsedMs, hitFeedback.intensityPx, hitFeedback.durationMs)
           : { x: 0, y: 0, scale: 1 };
+        const visualPos = { x: pos.x + shake.x, y: pos.y + shake.y };
+        this.drawEnemyTrail(this.enemyTrailLayer, en, visualPos, motion, shake.scale, hitFeedback);
         this.drawEnemyOverlay(g.overlay, en, hitFeedback);
+        g.image.rotation = motion.rotationRad;
+        g.fallback.rotation = motion.rotationRad;
+        g.overlay.rotation = 0;
         g.container.position.set(pos.x + shake.x, pos.y + shake.y);
-        g.container.scale.set(this.enemyVisualScale(en) * shake.scale);
+        g.container.scale.set(this.enemyVisualScale(en) * motion.visualScale * shake.scale);
       }
+      this.drawSpecialObjects();
     } else {
       this.updateEnemyHitFeedback(dtMs);
+      this.enemyTrailLayer.clear();
+      this.drawBossShardTelegraphs();
+      this.drawSpecialObjects();
     }
 
     // 시각 갱신 (running 무관)
@@ -777,7 +1618,16 @@ export class GameScene {
 
     const snap = this.scoring.snapshot();
     const cost = this.skillTable.solar_lance.gaugeCost;
-    const wave = waveHudState(this.elapsedMs);
+    const wave = waveHudState(this.elapsedMs, this.runConfig.rules.waveDurationMs);
+    const bossEveryMs = this.runConfig.rules.bossPolicy.bossEveryMs > 0 ? this.runConfig.rules.bossPolicy.bossEveryMs : 60000;
+    const boss = buildBossHudState(
+      this.objects?.getAlive() ?? [],
+      this.elapsedMs,
+      bossEveryMs,
+      undefined,
+      this.bossRuntime?.nextBossInMs(this.elapsedMs),
+      this.bossRuntime?.threatPercent(),
+    );
     this.hud.update(
       {
         energy: this.energy?.getEnergy() ?? 0,
@@ -793,6 +1643,15 @@ export class GameScene {
         waveNumber: wave.waveNumber,
         waveProgressRatio: wave.progressRatio,
         nextWaveInMs: wave.nextWaveInMs,
+        boss,
+        shield: {
+          active: this.deltaShieldRemainingMs > 0 && this.deltaShieldAbsorbs > 0,
+          remainingMs: this.deltaShieldRemainingMs,
+          durationMs: this.deltaShieldDurationMs,
+          absorbsRemaining: this.deltaShieldAbsorbs,
+          maxAbsorbs: this.deltaShieldMaxAbsorbs,
+        },
+        tutorial: buildTutorialHudState(this.runConfig, boss),
         timeMs: this.elapsedMs,
       },
       dtMs,
@@ -800,13 +1659,186 @@ export class GameScene {
   }
 
   private skillCooldownSlots() {
+    const enabled = new Set<SkillId>(this.runConfig.rules.enabledSkills);
     const defs = [
-      { id: "solar_lance", label: t("skill.solar_lance"), cost: this.skillTable.solar_lance.gaugeCost, cooldownSec: this.skillTable.solar_lance.cooldownSec, active: true },
-      { id: "orbital_cut", label: t("skill.orbital_cut"), cost: this.skillTable.orbital_cut.gaugeCost, cooldownSec: this.skillTable.orbital_cut.cooldownSec, active: false },
-      { id: "gravity_slow", label: t("skill.gravity_slow"), cost: this.skillTable.gravity_slow.gaugeCost, cooldownSec: this.skillTable.gravity_slow.cooldownSec, active: true },
-      { id: "delta_shield", label: t("skill.delta_shield"), cost: this.skillTable.delta_shield.gaugeCost, cooldownSec: this.skillTable.delta_shield.cooldownSec, active: false },
-      { id: "reserve_slot", label: t("skill.reserve_slot"), cost: this.skillTable.reserve_slot.gaugeCost, cooldownSec: this.skillTable.reserve_slot.cooldownSec, active: false },
+      { id: "solar_lance", label: t("skill.solar_lance"), cost: this.skillTable.solar_lance.gaugeCost, cooldownSec: this.skillTable.solar_lance.cooldownSec, active: enabled.has("solar_lance") },
+      { id: "orbital_cut", label: t("skill.orbital_cut"), cost: this.skillTable.orbital_cut.gaugeCost, cooldownSec: this.skillTable.orbital_cut.cooldownSec, active: enabled.has("orbital_cut") },
+      { id: "gravity_slow", label: t("skill.gravity_slow"), cost: this.skillTable.gravity_slow.gaugeCost, cooldownSec: this.skillTable.gravity_slow.cooldownSec, active: enabled.has("gravity_slow") },
+      { id: "delta_shield", label: t("skill.delta_shield"), cost: this.skillTable.delta_shield.gaugeCost, cooldownSec: this.skillTable.delta_shield.cooldownSec, active: enabled.has("delta_shield") },
+      { id: "nova_pulse", label: t("skill.nova_pulse"), cost: this.skillTable.nova_pulse.gaugeCost, cooldownSec: this.skillTable.nova_pulse.cooldownSec, active: enabled.has("nova_pulse") },
     ];
     return buildSkillCooldownSlots(defs, this.gauge, (skillId) => this.skills?.cooldownRemaining(skillId) ?? 0);
   }
+
+  private skillEnabled(skillId: SkillId): boolean {
+    const enabled = this.runConfig?.rules?.enabledSkills;
+    return enabled ? enabled.includes(skillId) : true;
+  }
+
+  private bossSpawnSpec(enemyType: string, spawnAtMs: number): SpawnSpec | null {
+    const def = this.enemies[enemyType];
+    if (!def) return null;
+    return {
+      enemyType,
+      spawnAtMs,
+      startAngleRad: -Math.PI / 2,
+      startRadius: def.startRadius,
+      angularSpeed: def.angularSpeed,
+      approachSpeed: def.approachSpeed,
+    };
+  }
+
+  private bossShardSpawnSpecs(event: BossShardEvent, boss: EnemyState): SpawnSpec[] {
+    const def = this.enemies[event.shardEnemyType];
+    if (!def || event.count <= 0) return [];
+    const count = Math.max(1, Math.floor(event.count));
+    const spreadRad = (Math.max(0, event.spreadDeg) * Math.PI) / 180;
+    const start = boss.angle - spreadRad / 2;
+    const step = count === 1 ? 0 : spreadRad / (count - 1);
+    const startRadius = Math.max(EARTH_GAMEPLAY_RADIUS * 1.6, boss.radius + event.spawnRadiusOffset);
+    const spawns: SpawnSpec[] = [];
+    for (let i = 0; i < count; i += 1) {
+      spawns.push({
+        enemyType: event.shardEnemyType,
+        spawnAtMs: this.elapsedMs,
+        startAngleRad: start + step * i,
+        startRadius,
+        angularSpeed: def.angularSpeed,
+        approachSpeed: def.approachSpeed,
+      });
+    }
+    return spawns;
+  }
+
+  private spawnBossShardEvent(event: BossShardEvent, boss: EnemyState): SpawnSpec[] {
+    const shardSpawns = this.spawnWithReplay(this.bossShardSpawnSpecs(event, boss), () => "boss_shard", boss.spawnOrdinal);
+    for (const spawn of shardSpawns) {
+      Telemetry.track("spawn", {
+        enemyType: spawn.enemyType,
+        modeId: this.runConfig.modeId,
+        difficulty: this.runConfig.difficulty,
+        source: event.kind,
+        bossType: event.bossType,
+        bossPhase: event.phaseLabel,
+        bossPattern: event.patternKind,
+      });
+    }
+    return shardSpawns;
+  }
+
+  private bossWaveSpawnIntervalMultiplier(): number {
+    const activeBoss = this.objects?.getAlive?.().find((enemy) => enemy.boss);
+    if (!activeBoss) return 1;
+    return bossWaveSpawnIntervalMultiplierForEnemy(activeBoss);
+  }
+
+  private drawBossShardTelegraphs(): void {
+    this.bossTelegraphLayer.clear();
+    this.bossShardTelegraphs = this.bossShardTelegraphs.filter((telegraph) => telegraph.expiresAtMs > this.elapsedMs);
+    if (this.bossShardTelegraphs.length === 0) return;
+    const earth = this.earth.ref();
+    for (const telegraph of this.bossShardTelegraphs) {
+      const remainingRatio = Math.max(0, Math.min(1, (telegraph.expiresAtMs - this.elapsedMs) / 1500));
+      const alpha = 0.18 + remainingRatio * 0.28;
+      const angles = [telegraph.startAngleRad, telegraph.centerAngleRad, telegraph.endAngleRad];
+      for (const angle of angles) {
+        const sx = earth.cx + Math.cos(angle) * telegraph.startRadius;
+        const sy = earth.cy + Math.sin(angle) * telegraph.startRadius;
+        const ex = earth.cx + Math.cos(angle) * telegraph.endRadius;
+        const ey = earth.cy + Math.sin(angle) * telegraph.endRadius;
+        this.bossTelegraphLayer.moveTo(sx, sy).lineTo(ex, ey).stroke({
+          width: angle === telegraph.centerAngleRad ? telegraph.centerWidth : telegraph.edgeWidth,
+          color: angle === telegraph.centerAngleRad ? telegraph.accentColor : telegraph.color,
+          alpha: angle === telegraph.centerAngleRad ? Math.min(0.72, alpha + 0.16) : alpha,
+          cap: "round",
+        });
+      }
+      for (let i = 0; i < telegraph.count; i += 1) {
+        const t = telegraph.count === 1 ? 0.5 : i / (telegraph.count - 1);
+        const angle = telegraph.startAngleRad + (telegraph.endAngleRad - telegraph.startAngleRad) * t;
+        const x = earth.cx + Math.cos(angle) * telegraph.startRadius;
+        const y = earth.cy + Math.sin(angle) * telegraph.startRadius;
+        this.bossTelegraphLayer.circle(x, y, telegraph.markerRadius).stroke({ width: 4, color: telegraph.accentColor, alpha: Math.min(0.78, alpha + 0.22) });
+        this.bossTelegraphLayer.circle(x, y, Math.max(5, telegraph.markerRadius * 0.48)).fill({ color: telegraph.color, alpha: Math.min(0.28, alpha * 0.7) });
+      }
+    }
+  }
+
+  private drawSpecialObjects(): void {
+    this.specialLayer.clear();
+    for (const object of this.specialObjects?.getAlive?.() ?? []) {
+      const color = specialObjectColor(object.type);
+      if (object.motion.kind === "satelliteOrbit") {
+        this.specialLayer.circle(object.motion.originX, object.motion.originY, object.motion.orbitRadiusPx).stroke({ width: 2, color, alpha: 0.18 });
+      }
+      if (object.motion.kind !== "static") {
+        this.specialLayer.moveTo(object.previousX, object.previousY).lineTo(object.x, object.y).stroke({ width: 5, color, alpha: 0.24, cap: "round" });
+      }
+      this.specialLayer.circle(object.x, object.y, object.radiusPx).fill({ color, alpha: 0.22 });
+      this.specialLayer.circle(object.x, object.y, object.radiusPx).stroke({ width: 7, color, alpha: 0.78 });
+      this.specialLayer.circle(object.x, object.y, Math.max(8, object.radiusPx * 0.28)).fill({ color: 0xffffff, alpha: 0.5 });
+      drawSpecialObjectSymbol(this.specialLayer, object, color);
+    }
+  }
+}
+
+function specialObjectColor(type: SpecialObjectState["type"]): number {
+  if (type === "friendlyRescue") return 0x60a5fa;
+  if (type === "energyCapsule") return 0x4ade80;
+  if (type === "empMine") return 0xa78bfa;
+  return 0x7dd3fc;
+}
+
+function cloneSegment(segment: Segment): Segment {
+  return {
+    a: { ...segment.a },
+    b: { ...segment.b },
+  };
+}
+
+function createTelemetrySessionTraceId(): string {
+  const random =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `orbitslash-run-${random}`;
+}
+
+function drawSpecialObjectSymbol(g: Graphics, object: SpecialObjectState, color: number): void {
+  const r = object.radiusPx;
+  const x = object.x;
+  const y = object.y;
+  const w = Math.max(4, r * 0.14);
+
+  if (object.type === "energyCapsule") {
+    g.moveTo(x - r * 0.35, y).lineTo(x + r * 0.35, y).stroke({ width: w, color: 0xffffff, alpha: 0.88, cap: "round" });
+    g.moveTo(x, y - r * 0.35).lineTo(x, y + r * 0.35).stroke({ width: w, color: 0xffffff, alpha: 0.88, cap: "round" });
+    return;
+  }
+
+  if (object.type === "friendlyRescue") {
+    g.moveTo(x, y - r * 0.38)
+      .lineTo(x + r * 0.3, y - r * 0.08)
+      .lineTo(x + r * 0.22, y + r * 0.35)
+      .lineTo(x, y + r * 0.5)
+      .lineTo(x - r * 0.22, y + r * 0.35)
+      .lineTo(x - r * 0.3, y - r * 0.08)
+      .lineTo(x, y - r * 0.38)
+      .stroke({ width: w, color: 0xffffff, alpha: 0.9, cap: "round", join: "round" });
+    return;
+  }
+
+  if (object.type === "empMine") {
+    g.moveTo(x, y - r * 0.45)
+      .lineTo(x + r * 0.42, y + r * 0.32)
+      .lineTo(x - r * 0.42, y + r * 0.32)
+      .lineTo(x, y - r * 0.45)
+      .stroke({ width: w, color: 0xffffff, alpha: 0.9, cap: "round", join: "round" });
+    g.moveTo(x, y - r * 0.18).lineTo(x, y + r * 0.12).stroke({ width: w, color: 0xffffff, alpha: 0.9, cap: "round" });
+    g.circle(x, y + r * 0.27, Math.max(2, r * 0.05)).fill({ color: 0xffffff, alpha: 0.9 });
+    return;
+  }
+
+  g.circle(x, y, r * 0.42).stroke({ width: w, color: 0xffffff, alpha: 0.86 });
+  g.moveTo(x - r * 0.28, y + r * 0.12).lineTo(x + r * 0.28, y - r * 0.12).stroke({ width: w, color: color, alpha: 0.9, cap: "round" });
 }

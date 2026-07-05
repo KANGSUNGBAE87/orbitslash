@@ -8,17 +8,18 @@ export interface HitFeedback {
   particleCount: number;
   labelScale: number;
   ringWidth: number;
+  lifeMs: number;
 }
 
 const BAND_STYLE: Record<
   DistanceBand,
-  { color: number; radius: number; isLastSave: boolean; particleCount: number; labelScale: number; ringWidth: number }
+  { color: number; radius: number; isLastSave: boolean; particleCount: number; labelScale: number; ringWidth: number; lifeMs: number }
 > = {
-  outer: { color: 0x9fe9ff, radius: 34, isLastSave: false, particleCount: 10, labelScale: 0.92, ringWidth: 3 },
-  mid: { color: 0x3fd8ff, radius: 40, isLastSave: false, particleCount: 13, labelScale: 1.0, ringWidth: 3 },
-  danger: { color: 0xffc14d, radius: 50, isLastSave: false, particleCount: 17, labelScale: 1.12, ringWidth: 4 },
-  lastSave: { color: 0x3fd8ff, radius: 72, isLastSave: true, particleCount: 26, labelScale: 1.24, ringWidth: 6 },
-  impact: { color: 0x9fe9ff, radius: 34, isLastSave: false, particleCount: 10, labelScale: 0.92, ringWidth: 3 },
+  outer: { color: 0x9fe9ff, radius: 34, isLastSave: false, particleCount: 10, labelScale: 0.92, ringWidth: 3, lifeMs: 560 },
+  mid: { color: 0x3fd8ff, radius: 40, isLastSave: false, particleCount: 13, labelScale: 1.0, ringWidth: 3, lifeMs: 600 },
+  danger: { color: 0xffc14d, radius: 58, isLastSave: false, particleCount: 20, labelScale: 1.16, ringWidth: 5, lifeMs: 680 },
+  lastSave: { color: 0x3fd8ff, radius: 88, isLastSave: true, particleCount: 34, labelScale: 1.36, ringWidth: 8, lifeMs: 900 },
+  impact: { color: 0x9fe9ff, radius: 34, isLastSave: false, particleCount: 10, labelScale: 0.92, ringWidth: 3, lifeMs: 560 },
 };
 
 export function feedbackForHitBand(band: DistanceBand, cfg: ScoringConfig): HitFeedback {
@@ -32,5 +33,6 @@ export function feedbackForHitBand(band: DistanceBand, cfg: ScoringConfig): HitF
     particleCount: style.particleCount,
     labelScale: style.labelScale,
     ringWidth: style.ringWidth,
+    lifeMs: style.lifeMs,
   };
 }

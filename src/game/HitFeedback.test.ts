@@ -22,11 +22,17 @@ describe("feedbackForHitBand", () => {
   });
 
   it("marks Last Save as a stronger feedback event", () => {
-    expect(feedbackForHitBand("lastSave", cfg)).toMatchObject({
+    const danger = feedbackForHitBand("danger", cfg);
+    const lastSave = feedbackForHitBand("lastSave", cfg);
+
+    expect(lastSave).toMatchObject({
       multiplier: 3.5,
       isLastSave: true,
     });
-    expect(feedbackForHitBand("lastSave", cfg).particleCount).toBeGreaterThan(feedbackForHitBand("danger", cfg).particleCount);
+    expect(lastSave.particleCount).toBeGreaterThan(danger.particleCount);
+    expect(lastSave.radius).toBeGreaterThan(danger.radius * 1.4);
+    expect(lastSave.ringWidth).toBeGreaterThan(danger.ringWidth);
+    expect(lastSave.lifeMs).toBeGreaterThan(danger.lifeMs);
   });
 
   it("falls back to x1.0 for impact or unknown multiplier bands", () => {

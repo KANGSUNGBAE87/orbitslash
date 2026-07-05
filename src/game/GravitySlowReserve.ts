@@ -2,7 +2,6 @@ import { GestureSystem } from "./GestureSystem";
 import type { EarthRef, Point } from "./types";
 
 export interface GravitySlowReserveOptions {
-  strokeHadHit: boolean;
   skillReady: boolean;
   gauge: number;
   gaugeCost: number;
@@ -16,7 +15,6 @@ export function shouldReserveLiveSlashForGravitySlow(
   earth: EarthRef,
   options: GravitySlowReserveOptions,
 ): boolean {
-  if (options.strokeHadHit) return false;
   if (!options.skillReady) return false;
   if (options.gauge < options.gaugeCost && !options.infiniteGauge) return false;
   if (points.length < 8) return false;

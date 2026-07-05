@@ -2,8 +2,7 @@ import type { EnemyState, SpawnSpec, EnemyDef } from "./types";
 import { EARTH_CENTER_X, EARTH_CENTER_Y, EARTH_ENEMY_IMPACT_RADIUS_PX } from "./coords";
 
 // 적 엔티티 (implementation-plan §1 [P1]). 나선 이동 로직은 순수하게 둔다.
-// 렌더(스프라이트) 배선 + 씬 연결은 Subagent B.
-// TODO(Phase1-B): Enemy 스프라이트 생성/풀 반환, GameScene movement 단계에 wiring.
+// Pixi sprite creation/pooling happens in GameScene/render modules.
 
 let idSeq = 0;
 
@@ -12,6 +11,7 @@ export function createEnemyState(spec: SpawnSpec, def: EnemyDef): EnemyState {
   idSeq += 1;
   return {
     id: idSeq,
+    spawnOrdinal: spec.spawnOrdinal,
     type: spec.enemyType,
     angle: spec.startAngleRad,
     radius: spec.startRadius,
@@ -27,6 +27,16 @@ export function createEnemyState(spec: SpawnSpec, def: EnemyDef): EnemyState {
     damage: def.damage,
     score: def.score,
     boss: def.boss,
+    attribute: def.attribute,
+    behavior: def.behavior,
+    splitInto: def.splitInto,
+    splitCount: def.splitCount,
+    precisionBonus: def.precisionBonus,
+    shieldHits: def.shieldHits,
+    empOnWrongHit: def.empOnWrongHit,
+    gravityPullRadiusPx: def.gravityPullRadiusPx,
+    visibility: def.visibility,
+    armorHits: def.armorHits,
     alive: true,
   };
 }
@@ -51,4 +61,33 @@ export function enemyXY(state: EnemyState): { x: number; y: number } {
     x: EARTH_CENTER_X + Math.cos(state.angle) * state.radius,
     y: EARTH_CENTER_Y + Math.sin(state.angle) * state.radius,
   };
+}
+
+export function splitSpawnSpecsForEnemy(enemy: EnemyState, hitAtMs: number): SpawnSpec[] {
+  if (!enemy.splitInto || !enemy.splitCount || enemy.splitCount <= 0) return [];
+  const count = Math.max(0, Math.floor(enemy.splitCount));
+  const spread = Math.PI / Math.max(3, count + 1);
+  const start = enemy.angle - spread * (count - 1) * 0.5;
+  return Array.from({ length: count }, (_, index) => ({
+    enemyType: enemy.splitInto!,
+    spawnAtMs: hitAtMs,
+    startAngleRad: normalizeAngle(start + spread * index),
+    startRadius: Math.max(180, enemy.radius + 34 + index * 8),
+    angularSpeed: enemy.angularSpeed * (index % 2 === 0 ? 1.1 : -0.95),
+    approachSpeed: Math.max(20, enemy.approachSpeed * 1.08),
+  }));
+}
+
+export function gravitonPullMultiplierForEnemy(enemy: EnemyState, candidates: readonly EnemyState[]): number {
+  if (!enemy.alive || enemy.boss || enemy.behavior === "orbit_pull") return 1;
+  for (const core of candidates) {
+    if (!core.alive || core.behavior !== "orbit_pull" || !core.gravityPullRadiusPx) continue;
+    if (Math.abs(enemy.radius - core.radius) <= core.gravityPullRadiusPx) return 1.25;
+  }
+  return 1;
+}
+
+function normalizeAngle(angle: number): number {
+  const full = Math.PI * 2;
+  return ((angle % full) + full) % full;
 }

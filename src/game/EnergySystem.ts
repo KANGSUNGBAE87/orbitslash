@@ -1,6 +1,5 @@
-// Earth Energy 시스템 (product-plan §11). 순수 로직 — 게임플레이 wiring은 Subagent B.
-// TODO(Phase1-B): 지구 충돌 감지 → applyDamage 호출, 지구 상태 연출(§11.3) 트리거,
-// 게임오버 → ResultScreen 전환을 GameScene collision 단계에 wiring.
+// Earth Energy 시스템 (product-plan §11). 순수 로직.
+// GameScene owns collision wiring, Earth visual state, and result transition.
 
 export type EarthVisualState = "healthy" | "cracked" | "warning" | "critical";
 

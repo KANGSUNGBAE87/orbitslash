@@ -13,7 +13,10 @@ export type TelemetryEventName =
   | "last_save"
   | "skill_fire"
   | "death"
-  | "run_submit";
+  | "run_submit"
+  | "ranked_submission_validation"
+  | "ranked_submission_result"
+  | "delta_shield_absorb";
 
 export interface TelemetryEvent {
   event: TelemetryEventName;
@@ -28,13 +31,23 @@ const ALLOWED_EVENTS = new Set<TelemetryEventName>([
   "skill_fire",
   "death",
   "run_submit",
+  "ranked_submission_validation",
+  "ranked_submission_result",
+  "delta_shield_absorb",
 ]);
 
 const ALLOWED_PROPS = new Set([
+  "accepted",
+  "boss",
+  "configVersion",
+  "endReason",
   "enemyType",
-  "skillId",
   "difficulty",
+  "modeId",
+  "ok",
+  "remaining",
   "score",
+  "skillId",
   "survivalMs",
   "reason",
   "combo",

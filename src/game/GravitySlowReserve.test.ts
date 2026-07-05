@@ -32,7 +32,6 @@ describe("shouldReserveLiveSlashForGravitySlow", () => {
   it("reserves a closed earth-enclosing circle when the skill can fire", () => {
     expect(
       shouldReserveLiveSlashForGravitySlow(closedCircle(), earth, {
-        strokeHadHit: false,
         skillReady: true,
         gauge: 100,
         gaugeCost: 70,
@@ -43,10 +42,22 @@ describe("shouldReserveLiveSlashForGravitySlow", () => {
     ).toBe(true);
   });
 
+  it("게이지가 부족하면 최종 원형 제스처가 맞아도 Gravity Slow 예약을 하지 않는다", () => {
+    expect(
+      shouldReserveLiveSlashForGravitySlow(closedCircle(), earth, {
+        skillReady: true,
+        gauge: 69,
+        gaugeCost: 70,
+        infiniteGauge: false,
+        circleTurnMinRad: 4.8,
+        closeMaxRatio: 0.3,
+      }),
+    ).toBe(false);
+  });
+
   it("does not reserve open spiral-like gestures", () => {
     expect(
       shouldReserveLiveSlashForGravitySlow(openSpiral(), earth, {
-        strokeHadHit: false,
         skillReady: true,
         gauge: 100,
         gaugeCost: 70,

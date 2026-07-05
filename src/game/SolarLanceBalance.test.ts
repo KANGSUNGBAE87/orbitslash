@@ -10,6 +10,7 @@ describe("Solar Lance balance", () => {
   });
 
   it("uses boosted damage while keeping the existing earth-linked gesture gate", () => {
+    expect(skillsJson.solar_lance.gaugeCost).toBe(72);
     expect(skillsJson.solar_lance.hitDamage).toBe(5);
     expect(skillsJson.solar_lance.lineToEarthMaxR).toBe(0.6);
     expect(skillsJson.solar_lance.endpointOutsideR).toBe(1.5);

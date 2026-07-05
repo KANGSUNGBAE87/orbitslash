@@ -3,9 +3,12 @@ import type {
   AuthResult,
   AdResult,
   PurchaseResult,
+  RewardedAdCapability,
+  PlatformAnalyticsEvent,
+  PlatformTelemetryContext,
 } from "./PlatformAdapter";
 
-// 로컬 개발용 noop 어댑터 (implementation-plan §6). Apps in Toss/Play는 LATER.
+// 로컬 개발용 noop 어댑터 (implementation-plan §6).
 // storage는 localStorage 백킹(브라우저), 없으면 메모리.
 
 export class WebStubAdapter implements IPlatformAdapter {
@@ -15,12 +18,26 @@ export class WebStubAdapter implements IPlatformAdapter {
     return { userId: "local-dev", provider: "web-stub" };
   }
 
+  telemetryContext(): PlatformTelemetryContext {
+    return { runtime: "web_stub" };
+  }
+
+  async rewardedAdCapability(): Promise<RewardedAdCapability> {
+    return { supported: false, reason: "platform_not_supported" };
+  }
+
   async showRewardedAd(): Promise<AdResult> {
-    return { shown: false, rewarded: false };
+    return {
+      shown: false,
+      rewarded: false,
+      rewardEarned: false,
+      dismissed: false,
+      reason: "platform_not_supported",
+    };
   }
 
   async purchase(productId: string): Promise<PurchaseResult> {
-    return { success: false, productId };
+    return { success: false, productId, reason: "platform_not_supported" };
   }
 
   async storageGet(key: string): Promise<string | null> {
@@ -46,5 +63,9 @@ export class WebStubAdapter implements IPlatformAdapter {
 
   haptic(_kind: "light" | "medium" | "heavy"): void {
     // noop — Apps in Toss haptics 어댑터에서 구현
+  }
+
+  async trackAnalyticsEvent(_event: PlatformAnalyticsEvent): Promise<void> {
+    // noop — platform analytics adapter에서 구현
   }
 }

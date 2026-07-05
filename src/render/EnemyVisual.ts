@@ -1,5 +1,6 @@
-import { Assets, Graphics, Texture } from "pixi.js";
+import { Graphics, Texture } from "pixi.js";
 import type { EnemyState } from "../game/types";
+import { loadTextureForAsset, preloadTextures, textureFromAsset } from "./TextureAssets";
 
 export type EnemyVisualShape = "meteor" | "comet" | "asteroid";
 
@@ -15,15 +16,27 @@ export interface EnemyVisualStyle {
 }
 
 const ASSETS: Record<string, string> = {
-  shard_meteor: "./assets/enemies/shard-meteor.svg",
-  small_meteor: "./assets/enemies/small-meteor.svg",
-  basic_meteor: "./assets/enemies/basic-meteor.svg",
-  fast_comet: "./assets/enemies/fast-comet.svg",
-  iron_planet: "./assets/enemies/iron-planet.svg",
-  directional_comet: "./assets/enemies/directional-comet.svg",
-  heavy_asteroid: "./assets/enemies/heavy-asteroid.svg",
-  ancient_planet: "./assets/enemies/ancient-planet.svg",
+  shard_meteor: "./assets/enemies/shard-meteor.png",
+  small_meteor: "./assets/enemies/small-meteor.png",
+  basic_meteor: "./assets/enemies/basic-meteor.png",
+  fast_comet: "./assets/enemies/fast-comet.png",
+  iron_planet: "./assets/enemies/iron-planet.png",
+  directional_comet: "./assets/enemies/directional-comet.png",
+  heavy_asteroid: "./assets/enemies/heavy-asteroid.png",
+  ancient_planet: "./assets/enemies/ancient-planet.png",
+  fire_meteor: "./assets/enemies/fire-meteor.svg",
+  ice_comet: "./assets/enemies/ice-comet.svg",
+  crystal_meteor: "./assets/enemies/crystal-meteor.svg",
+  shield_rock: "./assets/enemies/shield-rock.svg",
+  electric_meteor: "./assets/enemies/electric-meteor.svg",
+  graviton_core: "./assets/enemies/graviton-core.svg",
+  dark_meteor: "./assets/enemies/dark-meteor.svg",
+  armored_fragment: "./assets/enemies/armored-fragment.svg",
   eclipse_core: "./assets/enemies/eclipse-core.png",
+  ringed_destroyer: "./assets/enemies/ringed-destroyer.svg",
+  lava_titan: "./assets/enemies/lava-titan.svg",
+  ice_colossus: "./assets/enemies/ice-colossus.svg",
+  dark_planet: "./assets/enemies/dark-planet.svg",
 };
 
 const STYLES: Record<string, EnemyVisualStyle> = {
@@ -35,7 +48,19 @@ const STYLES: Record<string, EnemyVisualStyle> = {
   directional_comet: { shape: "comet", fill: 0x5bc7ff, rim: 0xffc14d, accent: 0x8ff3ff, directionalGuide: true, crackColor: 0x8ff3ff, sparkleColor: 0xffc14d },
   heavy_asteroid: { shape: "asteroid", fill: 0x6b7280, rim: 0xff6b2e, accent: 0xd1d5db, directionalGuide: false, crackColor: 0xfef3c7, sparkleColor: 0xff6b2e },
   ancient_planet: { shape: "asteroid", fill: 0x4c1d95, rim: 0xfbbf24, accent: 0xfef3c7, directionalGuide: false, crackColor: 0xfef3c7, sparkleColor: 0xfbbf24 },
+  fire_meteor: { shape: "comet", fill: 0xff6b2e, rim: 0xffd166, accent: 0xffedd5, directionalGuide: false, crackColor: 0xffedd5, sparkleColor: 0xffd166 },
+  ice_comet: { shape: "comet", fill: 0x7dd3fc, rim: 0xe0f2fe, accent: 0xffffff, directionalGuide: false, crackColor: 0xe0f2fe, sparkleColor: 0x38bdf8 },
+  crystal_meteor: { shape: "meteor", fill: 0xa78bfa, rim: 0xf0abfc, accent: 0xffffff, directionalGuide: false, crackColor: 0xf5d0fe, sparkleColor: 0xf0abfc },
+  shield_rock: { shape: "asteroid", fill: 0x334155, rim: 0x67e8f9, accent: 0xdbeafe, directionalGuide: false, crackColor: 0x67e8f9, sparkleColor: 0x22d3ee },
+  electric_meteor: { shape: "comet", fill: 0x2563eb, rim: 0xfacc15, accent: 0xffffff, directionalGuide: true, crackColor: 0xfef08a, sparkleColor: 0xfacc15 },
+  graviton_core: { shape: "asteroid", fill: 0x581c87, rim: 0xc084fc, accent: 0xf5d0fe, directionalGuide: false, crackColor: 0xe9d5ff, sparkleColor: 0xc084fc },
+  dark_meteor: { shape: "meteor", fill: 0x0f172a, rim: 0x818cf8, accent: 0x312e81, directionalGuide: false, crackColor: 0xc7d2fe, sparkleColor: 0x818cf8 },
+  armored_fragment: { shape: "asteroid", fill: 0x3f3f46, rim: 0xf59e0b, accent: 0xfef3c7, directionalGuide: false, crackColor: 0xfcd34d, sparkleColor: 0xf59e0b },
   eclipse_core: { shape: "asteroid", fill: 0x111827, rim: 0xf59e0b, accent: 0xfef3c7, directionalGuide: false, crackColor: 0xff5a2e, sparkleColor: 0xffc14d, boss: true },
+  ringed_destroyer: { shape: "asteroid", fill: 0x1f2937, rim: 0xf97316, accent: 0x67e8f9, directionalGuide: false, crackColor: 0xffedd5, sparkleColor: 0xfb923c, boss: true },
+  lava_titan: { shape: "asteroid", fill: 0x3b0a0a, rim: 0xef4444, accent: 0xfbbf24, directionalGuide: false, crackColor: 0xfef3c7, sparkleColor: 0xf97316, boss: true },
+  ice_colossus: { shape: "asteroid", fill: 0x164e63, rim: 0xbae6fd, accent: 0xffffff, directionalGuide: false, crackColor: 0xe0f2fe, sparkleColor: 0x7dd3fc, boss: true },
+  dark_planet: { shape: "asteroid", fill: 0x020617, rim: 0xa855f7, accent: 0xf0abfc, directionalGuide: false, crackColor: 0xe9d5ff, sparkleColor: 0xc084fc, boss: true },
 };
 
 export function enemyVisualStyle(type: string): EnemyVisualStyle {
@@ -46,24 +71,20 @@ export function enemyAssetUrl(type: string): string {
   return ASSETS[type] ?? ASSETS.basic_meteor!;
 }
 
-const TEXTURE_CACHE = new Map<string, Texture>();
-const TEXTURE_LOADING = new Set<string>();
+export function allEnemyAssetUrls(): string[] {
+  return Array.from(new Set(Object.values(ASSETS)));
+}
 
 export function enemyTexture(type: string): Texture | undefined {
-  const url = enemyAssetUrl(type);
-  const cached = TEXTURE_CACHE.get(url);
-  if (cached) return cached;
-  if (!TEXTURE_LOADING.has(url)) {
-    TEXTURE_LOADING.add(url);
-    void Assets.load<Texture>(url)
-      .then((texture) => {
-        TEXTURE_CACHE.set(url, texture);
-      })
-      .finally(() => {
-        TEXTURE_LOADING.delete(url);
-      });
-  }
-  return undefined;
+  return textureFromAsset(enemyAssetUrl(type));
+}
+
+export function preloadEnemyTextures(types: readonly string[] = Object.keys(ASSETS)): Promise<void> {
+  return preloadTextures(types.map((type) => enemyAssetUrl(type)));
+}
+
+export function loadEnemyTexture(type: string): Promise<Texture | undefined> {
+  return loadTextureForAsset(enemyAssetUrl(type));
 }
 
 export function drawDirectionalGuide(g: Graphics, en: EnemyState, requiredAngleRad?: number, clear = true): void {

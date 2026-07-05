@@ -1,13 +1,9 @@
 import type { GestureResult, HitResult, Segment, SkillTable, EarthRef } from "./types";
-import { straightness } from "./gesture-helpers";
+import { pathLength, straightness } from "./gesture-helpers";
 
-// 스킬 시스템 (implementation-plan §3.8). Phase 1: Solar Lance 직선 판정 골격만.
-// canonical 스킬 = 정확히 4종 (orbital_cut/solar_lance/gravity_slow/delta_shield).
-// 게이지/쿨타임 골격 + Solar Lance 직선성 검사는 여기. pointer-up 스냅샷 판정 결과를
-// 실제 적 목록과 매칭해 VFX를 띄우는 게임플레이 wiring은 Subagent B.
-// TODO(Phase1-B): Solar Lance 발동 시 직선 경로 위 적 판정(pointer-up 스냅샷),
-//   레이저 VFX(시각 전용, 판정 불변), 게이지 충전/소모, 쿨타임 tick를 GameScene에 wiring.
-// TODO(Phase2+): orbital_cut/gravity_slow/delta_shield 제스처 매칭 + 효과.
+// 스킬 시스템 (implementation-plan §3.8 확장). canonical 스킬 = 5종
+// (orbital_cut/solar_lance/gravity_slow/delta_shield/nova_pulse).
+// 여기서는 제스처 조건, 게이지, 쿨타임 판정을 담당하고 GameScene이 적 목록/VFX와 연결한다.
 
 export interface SkillContext {
   earth: EarthRef;
@@ -27,7 +23,32 @@ export interface GravitySlowActivation {
   slowMultiplier: number;
 }
 
-export type SkillActivation = SolarLanceActivation | GravitySlowActivation;
+export interface OrbitalCutActivation {
+  skillId: "orbital_cut";
+  radiusPx: number;
+  damage: number;
+}
+
+export interface DeltaShieldActivation {
+  skillId: "delta_shield";
+  durationMs: number;
+  absorbCount: number;
+}
+
+export interface NovaPulseActivation {
+  skillId: "nova_pulse";
+  radiusPx: number;
+  damage: number;
+  pushPx: number;
+  targetCap: number;
+}
+
+export type SkillActivation =
+  | SolarLanceActivation
+  | OrbitalCutActivation
+  | GravitySlowActivation
+  | DeltaShieldActivation
+  | NovaPulseActivation;
 
 export class SkillSystem {
   private cooldowns: Record<string, number> = {};
@@ -47,7 +68,7 @@ export class SkillSystem {
 
   /**
    * Solar Lance 발동 조건 판정 (product-plan §9.2). 직선성/길이/지구 관통 검사.
-   * 판정 통과 시 vfxLine만 채워 반환 (judgedHits 매칭은 Subagent B가 적 목록과 함께).
+   * 판정 통과 시 vfxLine만 반환하고, 실제 적 매칭은 GameScene collision 단계에서 처리한다.
    * 게이지/쿨타임 미충족이면 null.
    */
   trySolarLance(g: GestureResult, ctx: SkillContext): SolarLanceActivation | null {
@@ -102,6 +123,69 @@ export class SkillSystem {
       skillId: "gravity_slow",
       durationMs: def.durationMs ?? 2600,
       slowMultiplier: def.slowMultiplier ?? 0.45,
+    };
+  }
+
+  tryOrbitalCut(g: GestureResult, ctx: SkillContext): OrbitalCutActivation | null {
+    const def = this.skills.orbital_cut;
+    if (g.points.length < 4) return null;
+    if (!this.isReady("orbital_cut")) return null;
+    if (ctx.gauge < def.gaugeCost && !this.skills._debug.infiniteGauge) return null;
+    if (!g.enclosesEarth) return null;
+    if (g.totalTurnRad < (def.orbitTurnMinRad ?? 7.2)) return null;
+    if (g.startEndGapRatio > (def.closeMaxRatio ?? 0.55)) return null;
+
+    this.cooldowns.orbital_cut = (def.cooldownSec ?? 18) * 1000;
+    return {
+      skillId: "orbital_cut",
+      radiusPx: (def.radiusRatio ?? 4.2) * ctx.earth.r,
+      damage: def.hitDamage ?? 2,
+    };
+  }
+
+  tryNovaPulse(g: GestureResult, ctx: SkillContext): NovaPulseActivation | null {
+    const def = this.skills.nova_pulse;
+    if (g.points.length < 2) return null;
+    if (!this.isReady("nova_pulse")) return null;
+    if (ctx.gauge < def.gaugeCost && !this.skills._debug.infiniteGauge) return null;
+    if (straightness(g.points) < (def.straightnessMin ?? 0.72)) return null;
+
+    const first = g.points[0]!;
+    const last = g.points[g.points.length - 1]!;
+    const { cx, cy, r } = ctx.earth;
+    const startD = Math.hypot(first.x - cx, first.y - cy);
+    const endD = Math.hypot(last.x - cx, last.y - cy);
+    if (startD > (def.startNearEarthMaxR ?? 1.45) * r) return null;
+    if (endD < (def.endpointOutsideR ?? 2.35) * r) return null;
+    if (pathLength(g.points) < (def.minPathLengthR ?? 1.2) * r) return null;
+
+    const durationMs = Math.max(0, last.t - first.t);
+    if (durationMs > (def.durationMs ?? 650)) return null;
+
+    this.cooldowns.nova_pulse = (def.cooldownSec ?? 18) * 1000;
+    return {
+      skillId: "nova_pulse",
+      radiusPx: (def.radiusRatio ?? 2.7) * r,
+      damage: def.hitDamage ?? 1,
+      pushPx: def.pushPx ?? 170,
+      targetCap: def.targetCap ?? 4,
+    };
+  }
+
+  tryDeltaShield(g: GestureResult, ctx: SkillContext): DeltaShieldActivation | null {
+    const def = this.skills.delta_shield;
+    if (g.points.length < 4) return null;
+    if (!this.isReady("delta_shield")) return null;
+    if (ctx.gauge < def.gaugeCost && !this.skills._debug.infiniteGauge) return null;
+    if (!g.enclosesEarth) return null;
+    if (g.vertexCount < (def.triangleVertexMin ?? 3)) return null;
+    if (g.startEndGapRatio > (def.closeMaxRatio ?? 0.22)) return null;
+
+    this.cooldowns.delta_shield = (def.cooldownSec ?? 28) * 1000;
+    return {
+      skillId: "delta_shield",
+      durationMs: def.durationMs ?? 3200,
+      absorbCount: def.absorbCount ?? 3,
     };
   }
 

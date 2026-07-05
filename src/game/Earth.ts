@@ -1,13 +1,16 @@
-import { Container, Graphics } from "pixi.js";
+import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import {
   EARTH_CENTER_X,
   EARTH_CENTER_Y,
+  EARTH_BODY_DIAMETER,
   EARTH_BODY_RADIUS,
   EARTH_GAMEPLAY_RADIUS,
+  EARTH_SHIELD_DIAMETER,
   EARTH_SHIELD_RADIUS,
   LAST_SAVE_RING_RADIUS,
 } from "./coords";
 import { LAYER } from "./layers";
+import { earthTexture } from "../render/EarthVisual";
 import type { EarthVisualState } from "./EnergySystem";
 import type { EarthRef } from "./types";
 
@@ -26,6 +29,8 @@ const SHIELD_STYLE: Record<EarthVisualState, { color: number; alpha: number }> =
 export class Earth {
   readonly container: Container;
   private body: Graphics;
+  private bodySprite: Sprite;
+  private shieldSprite: Sprite;
   private shieldOuter: Graphics;
   private lastSaveRing: Graphics;
   private rotation = 0;
@@ -53,13 +58,48 @@ export class Earth {
       .stroke({ width: 1.5, color: 0x9fe9ff, alpha: 0.25 });
     this.shieldOuter.zIndex = LAYER.EARTH_SHIELD_OUTER;
 
+    this.shieldSprite = new Sprite(Texture.EMPTY);
+    this.shieldSprite.anchor.set(0.5);
+    this.shieldSprite.width = EARTH_SHIELD_DIAMETER;
+    this.shieldSprite.height = EARTH_SHIELD_DIAMETER;
+    this.shieldSprite.alpha = 0.95;
+    this.shieldSprite.visible = false;
+    this.shieldSprite.zIndex = LAYER.EARTH_SHIELD_OUTER;
+
     // 지구 본체 (로우폴리 느낌 플레이스홀더: 바다 + 대륙 점)
     this.body = new Graphics();
     this.drawBody();
     this.body.zIndex = LAYER.EARTH;
 
+    this.bodySprite = new Sprite(Texture.EMPTY);
+    this.bodySprite.anchor.set(0.5);
+    this.bodySprite.width = EARTH_BODY_DIAMETER;
+    this.bodySprite.height = EARTH_BODY_DIAMETER;
+    this.bodySprite.visible = false;
+    this.bodySprite.zIndex = LAYER.EARTH;
+
     this.container.sortableChildren = true;
-    this.container.addChild(this.lastSaveRing, this.shieldOuter, this.body);
+    this.container.addChild(this.lastSaveRing, this.shieldSprite, this.shieldOuter, this.body, this.bodySprite);
+    this.refreshAssetTextures();
+  }
+
+  private refreshAssetTextures(): void {
+    const core = earthTexture("core");
+    if (core && this.bodySprite.texture !== core) {
+      this.bodySprite.texture = core;
+      this.bodySprite.width = EARTH_BODY_DIAMETER;
+      this.bodySprite.height = EARTH_BODY_DIAMETER;
+      this.bodySprite.visible = true;
+      this.body.visible = false;
+    }
+
+    const shield = earthTexture("shield");
+    if (shield && this.shieldSprite.texture !== shield) {
+      this.shieldSprite.texture = shield;
+      this.shieldSprite.width = EARTH_SHIELD_DIAMETER;
+      this.shieldSprite.height = EARTH_SHIELD_DIAMETER;
+      this.shieldSprite.visible = true;
+    }
   }
 
   private drawBody(): void {
@@ -119,8 +159,10 @@ export class Earth {
 
   /** 느린 지구 회전 + 경고 펄스 (design §11). dtMs 단위. */
   update(dtMs: number): void {
+    this.refreshAssetTextures();
     this.rotation += (dtMs / 1000) * 0.12; // 매우 느린 자전
     this.body.rotation = this.rotation;
+    this.bodySprite.rotation = this.rotation;
     if (this.state === "warning" || this.state === "critical") {
       this.pulse += (dtMs / 1000) * 6;
       this.drawShield();

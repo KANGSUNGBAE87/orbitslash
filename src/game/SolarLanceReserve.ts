@@ -2,7 +2,6 @@ import { pathLength, straightness } from "./gesture-helpers";
 import type { EarthRef, Point } from "./types";
 
 export interface SolarLanceReserveOptions {
-  strokeHadHit: boolean;
   skillReady: boolean;
   gauge: number;
   gaugeCost: number;
@@ -15,7 +14,6 @@ export function shouldReserveLiveSlashForSolarLance(
   earth: EarthRef,
   options: SolarLanceReserveOptions,
 ): boolean {
-  if (options.strokeHadHit) return false;
   if (!options.skillReady) return false;
   if (options.gauge < options.gaugeCost && !options.infiniteGauge) return false;
   if (points.length < 2 || pathLength(points) < options.screenShortSide * 0.18) return false;

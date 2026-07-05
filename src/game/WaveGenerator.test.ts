@@ -69,7 +69,7 @@ describe("WaveGenerator 결정성 (랭킹 재현 보장의 핵심)", () => {
   it("wave table can keep directional enemies out of the opening seconds", () => {
     const gen = new WaveGenerator(createRng(99), { difficulty: "rookie" }, enemies, difficulty, orbits, waves);
 
-    expect(gen.next(25000).map((s) => s.enemyType)).not.toContain("directional_comet");
+    expect(gen.next(20000).map((s) => s.enemyType)).not.toContain("directional_comet");
   });
 
   it("wave table introduces directional enemies after the opening band", () => {
@@ -106,11 +106,97 @@ describe("WaveGenerator 결정성 (랭킹 재현 보장의 핵심)", () => {
     }
   });
 
-  it("uses 10-second wave gauge timing", () => {
-    expect(waveHudState(0)).toMatchObject({ waveNumber: 1, progressRatio: 0, nextWaveInMs: 10000 });
-    expect(waveHudState(9999)).toMatchObject({ waveNumber: 1, nextWaveInMs: 1 });
-    expect(waveHudState(10000)).toMatchObject({ waveNumber: 2, progressRatio: 0, nextWaveInMs: 10000 });
-    expect(waveHudState(65000)).toMatchObject({ waveNumber: 7, progressRatio: 0.5, nextWaveInMs: 5000 });
+  it("applies mode content enemy weight bias deterministically", () => {
+    const testWaves: WaveTable = {
+      rookie: [
+        {
+          fromMs: 0,
+          spawnIntervalMs: 1,
+          weights: { small_meteor: 1, directional_comet: 1 },
+        },
+      ],
+    };
+    const withBias = new WaveGenerator(
+      createRng(11),
+      { difficulty: "rookie", enemyWeightBias: { small_meteor: 10, directional_comet: 0 } },
+      enemies,
+      difficulty,
+      orbits,
+      testWaves,
+    );
+
+    expect(withBias.next(30).map((spawn) => spawn.enemyType)).not.toContain("directional_comet");
+  });
+
+  it("uses 7-second wave gauge timing", () => {
+    expect(waveHudState(0)).toMatchObject({ waveNumber: 1, progressRatio: 0, nextWaveInMs: 7000 });
+    expect(waveHudState(6999)).toMatchObject({ waveNumber: 1, nextWaveInMs: 1 });
+    expect(waveHudState(7000)).toMatchObject({ waveNumber: 2, progressRatio: 0, nextWaveInMs: 7000 });
+    expect(waveHudState(45500)).toMatchObject({ waveNumber: 7, progressRatio: 0.5, nextWaveInMs: 3500 });
+  });
+
+  it("aligns wave table bands to the 7-second HUD cadence", () => {
+    expect(waves.rookie!.map((band) => band.fromMs)).toEqual([
+      0,
+      7000,
+      14000,
+      21000,
+      28000,
+      35000,
+      42000,
+      49000,
+      56000,
+      63000,
+    ]);
+  });
+
+  it("defines difficulty overlays that introduce advanced variants later", () => {
+    expect(Object.keys(waves)).toEqual(expect.arrayContaining(["rookie", "defender", "elite", "master"]));
+
+    const defenderTypes = new Set(waves.defender!.flatMap((band) => Object.keys(band.weights)));
+    const eliteTypes = new Set(waves.elite!.flatMap((band) => Object.keys(band.weights)));
+    const masterTypes = new Set(waves.master!.flatMap((band) => Object.keys(band.weights)));
+
+    expect([...defenderTypes]).toEqual(expect.arrayContaining(["fire_meteor", "ice_comet", "crystal_meteor"]));
+    expect([...eliteTypes]).toEqual(expect.arrayContaining(["shield_rock", "electric_meteor", "graviton_core"]));
+    expect([...masterTypes]).toEqual(expect.arrayContaining(["dark_meteor", "armored_fragment", "graviton_core"]));
+  });
+
+  it("caps streaks for disruptive advanced variants in late waves", () => {
+    for (const difficultyKey of ["defender", "elite", "master"] as const) {
+      const lateBands = waves[difficultyKey]!.filter((band) => band.fromMs >= 28000);
+      expect(lateBands.length).toBeGreaterThan(0);
+      for (const band of lateBands) {
+        for (const disruptive of ["directional_comet", "shield_rock", "electric_meteor", "graviton_core", "dark_meteor", "armored_fragment"]) {
+          if (band.weights[disruptive]) {
+            expect(band.maxConsecutive?.[disruptive]).toBeLessThanOrEqual(2);
+          }
+        }
+      }
+    }
+  });
+
+  it("can deterministically spawn newly authored advanced variants from wave weights", () => {
+    const testWaves: WaveTable = {
+      rookie: [
+        {
+          fromMs: 0,
+          spawnIntervalMs: 1,
+          weights: {
+            fire_meteor: 1,
+            ice_comet: 1,
+            shield_rock: 1,
+            graviton_core: 1,
+            armored_fragment: 1,
+          },
+        },
+      ],
+    };
+    const gen = new WaveGenerator(createRng(20260705), { difficulty: "rookie" }, enemies, difficulty, orbits, testWaves);
+
+    const types = new Set(gen.next(3000).map((s) => s.enemyType));
+
+    expect([...types]).toEqual(expect.arrayContaining(["fire_meteor", "ice_comet", "shield_rock", "graviton_core", "armored_fragment"]));
   });
 
   it("boss spawns every 60 seconds without stopping normal spawns", () => {

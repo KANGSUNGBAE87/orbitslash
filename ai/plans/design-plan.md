@@ -17,6 +17,10 @@ canonical: true
 - 2026-06-28 (claude): v1.2 — Owner 지시로 게임 화면 지구 크기 기존 1/3 축소
   (body 300→100, shield 420→140, Last Save 링 520→174). §2.2/§2.3 갱신. 코드 coords.ts 동기화.
   운석 radiusPx는 미변경(상대적으로 커짐 — 필요 시 후속 조정).
+- 2026-07-05 (codex): v1.3 — Owner 실기기 피드백에 맞춰 gameplay visual SSOT를
+  current `coords.ts` 값으로 정렬. Earth body diameter = 130, Earth shield diameter = 182,
+  Last Save ring diameter = 226. 충돌/거리 판정 반경은 별도 gameplay radius로 유지.
+  `Black Core`는 deprecated concept로 보존하고 current release roster는 Eclipse Core 중심으로 정리.
 
 ---
 
@@ -66,21 +70,22 @@ buttons, cinematic but readable.
 1080x1920 기준 약 580~700px (centerY 650~720, body 620, shield 760)
 ```
 
-### 2.2 게임 화면 (작아야 함) — v1.2 Owner 축소
+### 2.2 게임 화면 (작아야 함) — v1.3 Owner 재조정
 ```text
-v1.2 (2026-06-28 Owner 지시): 기존 대비 1/3 축소 적용.
-1080x1920 기준 body 100px, shield 140px (기존 body 280~330 → 100).
+v1.3 (2026-07-05 Owner 지시): v1.2 축소값에서 실기기 가독성을 위해 1.3x 시각 확대 적용.
+1080x1920 기준 Earth body diameter = 130, Earth shield diameter = 182.
 이유: 운석·구조대·보스·스킬 이펙트 플레이 공간 더 넓게.
-절대 500px 이상 금지 (보스전에서도). 원래 1/6 가이드보다 더 작음(약 1/19).
+충돌/거리 판정 반경은 visual radius와 분리해 `EARTH_GAMEPLAY_RADIUS`로 유지.
+절대 500px 이상 금지 (보스전에서도). 여전히 화면 높이 1/6보다 훨씬 작음.
 ```
 
-### 2.3 플레이 화면 기준 좌표 (1080x1920) — v1.2
+### 2.3 플레이 화면 기준 좌표 (1080x1920) — v1.3
 ```text
 Earth center X = 540
 Earth center Y = 860~940 (구현 기본 900)
-Earth body diameter = 100   (v1.2, 기존 300의 1/3)
-Earth shield diameter = 140  (v1.2, 기존 420)
-Last Save ring diameter = 174 (v1.2, 기존 520)
+Earth body diameter = 130
+Earth shield diameter = 182
+Last Save ring diameter = 226
 Outer orbit radius = 700~850
 ```
 | 화면 | 지구 중심 Y |
@@ -174,8 +179,8 @@ Delta Shield=시안/화이트, Missile/Plasma=오렌지/레드, Repair/Rescue=�
 
 > ⚠️ **스킬 이름 충돌 주의**: 목업 이미지엔 Laser Strike, Plasma Burst, Missile
 > Barrage, Frost Bomb, Black Hole, Hyper/Repair Drone 등 다양한 버튼명이 보임.
-> **canonical 스킬 = product-plan §8의 4종** (Orbital Cut, Solar Lance, Gravity
-> Slow, Delta Shield). 목업의 추가 버튼명은 아트 시안일 뿐, 실제 스킬셋은 4종 기준.
+> **canonical 스킬 = product-plan §8의 5종** (Orbital Cut, Solar Lance, Gravity
+> Slow, Delta Shield, Nova Pulse). 목업의 추가 버튼명은 아트 시안일 뿐, 실제 스킬셋은 5종 기준.
 > 목업의 "Orbital Slash" = plan의 "Orbital Cut". 확장은 Owner 승인 시에만.
 
 ---
@@ -201,9 +206,9 @@ Delta Shield=시안/화이트, Missile/Plasma=오렌지/레드, Repair/Rescue=�
 - **S7 Gravity Crisis** (centerY 1020, body 290): 퍼플 중력 소용돌이 상단, 궤도 휘어짐,
   가장자리 렌즈 왜곡. Gravity Slow 강조. **visual distortion ≠ collision distortion**
   (보이는 건 화려, 판정은 원/선분 단순). 5 스킬.
-- **S8 Final Orbit** (centerY 1080, body 280~300): 최종전. Dark Core 보스 상단
-  (500~650), 지구서 방어 레이저 사방 발사, 다방향 탄막. 퍼플/블랙 위협 vs 시안 방어
-  대비 강하게. 모든 스킬. 충분한 빈 공간 확보.
+- **S8 Final Orbit** (centerY 1080, body 130): 최종전. Dark Planet/Eclipse Core 계열 보스 상단
+   (500~650), 지구서 방어 레이저 사방 발사, 다방향 탄막. 퍼플/블랙 위협 vs 시안 방어
+   대비 강하게. 모든 스킬. 충분한 빈 공간 확보.
 
 ---
 
@@ -300,7 +305,7 @@ HUD·에셋 형태의 시각 기준. 단 목업의 게임 지구 크기는 §2 �
    블루 방어 레이저 사방 발사, 하단 우주선, 5 스킬(Shield/Missile/Black Hole/Laser/Meteor).
 
 > 목업 ↔ 기획 차이 (기록): ① 게임 화면 지구 크기 → §2로 축소 (목업이 큼). ②
-> 스킬 버튼명 다양 → canonical 4종 기준(§7 경고). 목업은 시각 톤·HUD·에셋·연출 기준,
+> 스킬 버튼명 다양 → canonical 5종 기준(§7 경고). 목업은 시각 톤·HUD·에셋·연출 기준,
 > 게임 규칙/스케일은 product-plan + 본 문서 §2/§7 우선.
 
 ---

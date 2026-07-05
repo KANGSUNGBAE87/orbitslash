@@ -11,10 +11,14 @@ canonical: true
 > component specs. Derived from design-plan.md v1.1 (Visual SSOT) and
 > product-plan.md v1.0. Covers React/HTML menu screens and PixiJS Canvas HUD
 > overlay layer. Do NOT contradict design-plan §2 (earth size) or product-plan §8
-> (canonical 4 skills).
+> (canonical 5 skills).
 
 ## Change Log
 
+- 2026-07-05 (codex): v0.2 SSOT sync. Gameplay Earth visual constants aligned
+  to `coords.ts`: Earth body diameter = 130, Earth shield diameter = 182,
+  Last Save ring diameter = 226. Canonical skill scope aligned to 5 release
+  skills.
 - 2026-06-28 (claude): v0.1 initial design system. Palette locked from design-plan
   §1.2 art direction (colors.io timed out, Coolors page did not expose hex data —
   hex values derived from stated direction and cosmic neon arcade conventions).
@@ -25,21 +29,23 @@ canonical: true
 
 ## CRITICAL CONSTRAINTS (Must Restate)
 
-1. **Earth size — gameplay**: body 280–330 px, shield 390–460 px. NEVER exceed
-   500 px even in boss stages. Design-sample mockups draw earth oversized —
-   ignore those proportions for gameplay; honor §2 of design-plan only.
+1. **Earth size — gameplay**: Earth body diameter = 130, Earth shield diameter = 182,
+   Last Save ring diameter = 226. These are gameplay visual constants from
+   `coords.ts`; collision, impact, and distance rules use separate gameplay
+   radii and must not be inferred from sprite size alone.
 2. **Text/numbers always code-rendered**: panel frames, icons, button shells may
    be sprites/images. All actual text, numerals, counters, timers, and labels
    are HTML/CSS or Canvas Text — never baked into image assets.
 3. **Skill-name conflict**: mockup images show Laser Strike / Plasma Burst /
    Missile Barrage / Frost Bomb / Black Hole / Hyper Drone / Orbital Slash etc.
-   CANONICAL skills = exactly 4 from product-plan §8:
+   CANONICAL skills = exactly 5 from product-plan §8:
    - Orbital Cut (mockup "Orbital Slash" = this)
    - Solar Lance
    - Gravity Slow
    - Delta Shield
+   - Nova Burst
    Mockup extra button names are art-direction references only. Design system
-   uses the 4 canonical skills only. Extension requires Owner approval.
+   uses the 5 canonical skills only. Further extension requires Owner approval.
 4. **No static screen images**: all screens are layered, reusable components
    (design-plan §10 layer stack). Never build a gameplay screen as one background image.
 5. **Base coordinate system**: 1080 × 1920 px, vertical 9:16. Scale by
@@ -597,7 +603,7 @@ animation: flash 400ms infinite
 
 ### 7.5 Circular 3D Skill Button
 
-The primary interactive gameplay element. Four instances, one per canonical skill.
+The primary interactive gameplay element. Five instances, one per canonical skill.
 
 **Base sizing**:
 ```
@@ -612,7 +618,7 @@ Emphasized:        175px  (when skill is the stage's focus)
 **Props**:
 ```ts
 interface SkillButtonProps {
-  skill: 'orbital-cut' | 'solar-lance' | 'gravity-slow' | 'delta-shield';
+  skill: 'orbital-cut' | 'solar-lance' | 'gravity-slow' | 'delta-shield' | 'nova-pulse';
   state: 'idle' | 'ready' | 'cooldown' | 'disabled';
   cooldownProgress: number;  // 0.0 (just used) → 1.0 (ready)
   cooldownSeconds: number;   // remaining seconds to display
@@ -628,6 +634,7 @@ interface SkillButtonProps {
 | Solar Lance | `--skill-solar-lance` (#f59e0b) | `--glow-gold-md` |
 | Gravity Slow | `--skill-gravity-slow` (#a855f7) | `--glow-purple-md` |
 | Delta Shield | `--skill-delta-shield` (#a5f3fc) | `--glow-cyan-sm` |
+| Nova Pulse | `--skill-solar-lance` fallback (#f59e0b) | `--glow-gold-sm` |
 
 **Visual structure (layers from back to front)**:
 ```
@@ -1042,8 +1049,9 @@ Ties design tokens to gameplay states for renderer implementation.
 | 39–10 | `--earth-danger` | 0.5 (red tint) | broken pattern | red vignette |
 | < 10 | `--earth-critical` | 0.3, flash | barely visible | red flash pulse |
 
-Earth body diameter in gameplay: **300 px** (design-plan canonical value within
-the 280–330 range). Shield: **420 px**. Last Save ring: **520 px**.
+Earth body diameter = 130 (current `coords.ts` gameplay SSOT).
+Earth shield diameter = 182.
+Last Save ring diameter = 226.
 These values NEVER scale up during normal gameplay; only the global canvas
 scale factor applies.
 
@@ -1057,7 +1065,7 @@ scale factor applies.
    target.
 
 2. **Skill icon sprites**: design_sample asset pack (07) has VFX, but individual
-   circular button icon sprites for the 4 canonical skills are not confirmed as
+   circular button icon sprites for the 5 canonical skills are not confirmed as
    final assets. Confirm whether Owner will supply custom icons or whether we
    derive them from the sample VFX sprites.
 

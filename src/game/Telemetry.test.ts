@@ -6,12 +6,22 @@ describe("LocalTelemetry", () => {
     const telemetry = new LocalTelemetry();
 
     telemetry.track("skill_fire", { skillId: "gravity_slow", rawMemo: "should-drop" });
+    telemetry.track("ranked_submission_result", { accepted: true, freeText: "drop-me" });
+    telemetry.track("delta_shield_absorb", { enemyType: "lava_titan", boss: true, remaining: 1 });
     telemetry.track("free_text_event", { value: "nope" });
 
     expect(telemetry.flush()).toEqual([
       {
         event: "skill_fire",
         props: { skillId: "gravity_slow" },
+      },
+      {
+        event: "ranked_submission_result",
+        props: { accepted: true },
+      },
+      {
+        event: "delta_shield_absorb",
+        props: { enemyType: "lava_titan", boss: true, remaining: 1 },
       },
     ]);
   });

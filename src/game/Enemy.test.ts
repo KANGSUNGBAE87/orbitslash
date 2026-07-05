@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createEnemyState } from "./Enemy";
+import { createEnemyState, gravitonPullMultiplierForEnemy, splitSpawnSpecsForEnemy } from "./Enemy";
 import { EARTH_ENEMY_IMPACT_RADIUS_PX } from "./coords";
 import type { EnemyDef, SpawnSpec } from "./types";
 
@@ -52,5 +52,48 @@ describe("createEnemyState", () => {
     const enemy = createEnemyState(spec, { ...def, directional: true, directionalSlashAngleDeg: 45 });
 
     expect(enemy.directionalSlashAngleRad).toBeCloseTo(Math.PI / 4, 6);
+  });
+
+  it("carries authored advanced behavior metadata into runtime enemy state", () => {
+    const enemy = createEnemyState(spec, {
+      ...def,
+      attribute: "ice",
+      behavior: "split",
+      splitInto: "shard_meteor",
+      splitCount: 3,
+    });
+
+    expect(enemy.attribute).toBe("ice");
+    expect(enemy.behavior).toBe("split");
+    expect(enemy.splitInto).toBe("shard_meteor");
+    expect(enemy.splitCount).toBe(3);
+  });
+
+  it("creates deterministic split spawn specs near the defeated enemy orbit", () => {
+    const enemy = createEnemyState(
+      { ...spec, spawnAtMs: 1234, startAngleRad: Math.PI / 2, startRadius: 420 },
+      { ...def, behavior: "split", splitInto: "shard_meteor", splitCount: 3 },
+    );
+
+    const splits = splitSpawnSpecsForEnemy(enemy, 5555);
+
+    expect(splits).toHaveLength(3);
+    expect(splits.map((split) => split.enemyType)).toEqual(["shard_meteor", "shard_meteor", "shard_meteor"]);
+    expect(splits.map((split) => split.spawnAtMs)).toEqual([5555, 5555, 5555]);
+    expect(splits[0]?.startRadius).toBeGreaterThan(enemy.radius);
+    expect(splits[1]?.startAngleRad).not.toBe(splits[0]?.startAngleRad);
+  });
+
+  it("adds a pull multiplier for enemies close to active graviton cores", () => {
+    const target = createEnemyState({ ...spec, startRadius: 500 }, def);
+    const graviton = createEnemyState(
+      { ...spec, enemyType: "graviton_core", startRadius: 560 },
+      { ...def, behavior: "orbit_pull", gravityPullRadiusPx: 120 },
+    );
+
+    expect(gravitonPullMultiplierForEnemy(target, [graviton])).toBeGreaterThan(1);
+    expect(gravitonPullMultiplierForEnemy(graviton, [graviton])).toBe(1);
+    graviton.alive = false;
+    expect(gravitonPullMultiplierForEnemy(target, [graviton])).toBe(1);
   });
 });

@@ -14,8 +14,22 @@ import type {
 } from "./types";
 
 // Remote Config (implementation-plan §3.6). 모든 시스템의 데이터 진입 단일 통로.
-// 지금: 로컬 /data JSON 반환. 나중: 원격 fetch로 교체 (ready()가 비동기 로드 지점).
-// TODO(Phase6): 원격 fetch + 캐시 + 버전 핀. product-plan §23.5.
+// 원격 config는 명시 env flag가 켜졌을 때만 fetch하고, 실패/부분 응답은 로컬 JSON으로 즉시 fallback한다.
+
+export type RemoteConfigStatus =
+  | { source: "local"; version: "local"; reason: "remote_disabled" | "missing_endpoint" | "fetch_failed" | "invalid_payload" | "not_loaded" }
+  | { source: "remote"; version: string; reason?: undefined };
+
+export interface RemoteConfigOptions {
+  enabled?: boolean;
+  endpointUrl?: string;
+  fetchFn?: typeof fetch;
+}
+
+interface RemoteConfigPayload {
+  version?: string;
+  tables?: Partial<Record<ConfigTableKey, unknown>>;
+}
 
 export interface IRemoteConfig {
   get<T = unknown>(key: string): T;
@@ -25,10 +39,14 @@ export interface IRemoteConfig {
   getSkills(): SkillTable;
   getOrbits(): OrbitProfile[];
   getWaves(): WaveTable;
+  status(): RemoteConfigStatus;
   ready(): Promise<void>;
 }
 
-const tables: Record<string, unknown> = {
+const TABLE_KEYS = ["enemies", "scoring", "difficulty", "skills", "orbits", "waves"] as const;
+type ConfigTableKey = (typeof TABLE_KEYS)[number];
+
+const tables: Record<ConfigTableKey, unknown> = {
   enemies: enemiesJson,
   scoring: scoringJson,
   difficulty: difficultyJson,
@@ -38,31 +56,122 @@ const tables: Record<string, unknown> = {
 };
 
 class LocalRemoteConfig implements IRemoteConfig {
+  private activeTables: Record<ConfigTableKey, unknown> = { ...tables };
+  private readyPromise: Promise<void> | null = null;
+  private currentStatus: RemoteConfigStatus;
+
+  constructor(private readonly options: RemoteConfigOptions = {}) {
+    this.currentStatus = this.initialStatus();
+  }
+
   get<T = unknown>(key: string): T {
-    return tables[key] as T;
+    return (this.isTableKey(key) ? this.activeTables[key] : undefined) as T;
   }
+
   getEnemies(): EnemyTable {
-    return enemiesJson as unknown as EnemyTable;
+    return this.activeTables.enemies as EnemyTable;
   }
+
   getScoring(): ScoringConfig {
-    return scoringJson as unknown as ScoringConfig;
+    return this.activeTables.scoring as ScoringConfig;
   }
+
   getDifficulty(): DifficultyTable {
-    return difficultyJson as unknown as DifficultyTable;
+    return this.activeTables.difficulty as DifficultyTable;
   }
+
   getSkills(): SkillTable {
-    return skillsJson as unknown as SkillTable;
+    return this.activeTables.skills as SkillTable;
   }
+
   getOrbits(): OrbitProfile[] {
-    return (orbitsJson as unknown as { profiles: OrbitProfile[] }).profiles;
+    return (this.activeTables.orbits as { profiles: OrbitProfile[] }).profiles;
   }
+
   getWaves(): WaveTable {
-    return wavesJson as unknown as WaveTable;
+    return this.activeTables.waves as WaveTable;
   }
+
+  status(): RemoteConfigStatus {
+    return this.currentStatus;
+  }
+
   ready(): Promise<void> {
-    // 원격 도입 전: 즉시 resolve.
-    return Promise.resolve();
+    if (this.readyPromise) return this.readyPromise;
+    this.readyPromise = this.loadRemote();
+    return this.readyPromise;
+  }
+
+  private async loadRemote(): Promise<void> {
+    if (!this.options.enabled) {
+      this.currentStatus = { source: "local", version: "local", reason: "remote_disabled" };
+      return;
+    }
+    if (!this.options.endpointUrl) {
+      this.currentStatus = { source: "local", version: "local", reason: "missing_endpoint" };
+      return;
+    }
+    const fetchFn = this.options.fetchFn ?? globalThis.fetch;
+    if (!fetchFn) {
+      this.currentStatus = { source: "local", version: "local", reason: "fetch_failed" };
+      return;
+    }
+
+    try {
+      const response = await fetchFn(this.options.endpointUrl, {
+        method: "GET",
+        headers: { accept: "application/json" },
+      });
+      if (!response.ok) throw new Error(`remote_config_http_${response.status}`);
+      const payload = await response.json() as RemoteConfigPayload;
+      if (!isRemoteConfigPayload(payload)) {
+        this.currentStatus = { source: "local", version: "local", reason: "invalid_payload" };
+        return;
+      }
+      const nextTables: Record<ConfigTableKey, unknown> = { ...tables };
+      for (const key of TABLE_KEYS) {
+        const value = payload.tables?.[key];
+        if (isPlainObject(value)) nextTables[key] = value;
+      }
+      this.activeTables = nextTables;
+      this.currentStatus = { source: "remote", version: payload.version || "remote" };
+    } catch {
+      this.activeTables = { ...tables };
+      this.currentStatus = { source: "local", version: "local", reason: "fetch_failed" };
+    }
+  }
+
+  private initialStatus(): RemoteConfigStatus {
+    if (!this.options.enabled) return { source: "local", version: "local", reason: "remote_disabled" };
+    if (!this.options.endpointUrl) return { source: "local", version: "local", reason: "missing_endpoint" };
+    return { source: "local", version: "local", reason: "not_loaded" };
+  }
+
+  private isTableKey(key: string): key is ConfigTableKey {
+    return (TABLE_KEYS as readonly string[]).includes(key);
   }
 }
 
-export const RemoteConfig: IRemoteConfig = new LocalRemoteConfig();
+export function createRemoteConfig(options: RemoteConfigOptions = {}): IRemoteConfig {
+  return new LocalRemoteConfig(options);
+}
+
+export function createRemoteConfigFromEnv(env: Record<string, string | boolean | undefined> = import.meta.env): IRemoteConfig {
+  const enabled = env.VITE_REMOTE_CONFIG_ENABLED === true || env.VITE_REMOTE_CONFIG_ENABLED === "true";
+  return createRemoteConfig({
+    enabled,
+    endpointUrl: typeof env.VITE_REMOTE_CONFIG_URL === "string" ? env.VITE_REMOTE_CONFIG_URL : undefined,
+  });
+}
+
+function isRemoteConfigPayload(value: unknown): value is RemoteConfigPayload {
+  if (!isPlainObject(value)) return false;
+  const tablesValue = (value as { tables?: unknown }).tables;
+  return tablesValue === undefined || isPlainObject(tablesValue);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export const RemoteConfig: IRemoteConfig = createRemoteConfigFromEnv();

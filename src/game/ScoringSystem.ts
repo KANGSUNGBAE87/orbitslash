@@ -142,6 +142,10 @@ export class ScoringSystem {
     this.lastComboHitAtMs = null;
   }
 
+  addBonus(amount: number): void {
+    this.score += Math.max(0, amount);
+  }
+
   reset(): void {
     this.score = 0;
     this.combo = 0;

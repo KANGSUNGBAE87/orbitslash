@@ -36,8 +36,10 @@ canonical: true
 ### 0.1 Phase 1 목표 (반드시 동작)
 product-plan §27.1 + §30:
 
-- 중앙 **작은** 지구 (design §2.2: body 280~330px, shield 390~460px, center ~540,900).
-  목업의 과대 지구를 **절대 따르지 않음** (design §2, §12, product-plan §28 미준수 금지).
+- 중앙 **작은** 지구 (design §2.2 / `coords.ts`: Earth body diameter = 130,
+  Earth shield diameter = 182, Last Save ring diameter = 226, center ~540,900).
+  목업의 과대 지구를 **절대 따르지 않음**. 판정/거리/충돌 반경은 sprite visual size와
+  분리된 gameplay radius를 사용한다.
 - 나선형 궤도 접근 적 (product-plan §15.1 수학).
 - 손가락 슬래시 입력 → `points[] = [{x,y,t}]` → 슬래시 trail 렌더.
 - 선분-원 충돌 판정 (`segmentIntersectsCircle`), Multi Cut.
@@ -65,10 +67,10 @@ product-plan §27.1 + §30:
 15. 억울한 판정 금지 (pointer-up 시점 스냅샷 판정).
 
 ### 0.4 스킬 이름 충돌 (가드)
-canonical 스킬 = **정확히 4종**: Orbital Cut, Solar Lance, Gravity Slow, Delta Shield
+canonical 스킬 = **정확히 5종**: Orbital Cut, Solar Lance, Gravity Slow, Delta Shield, Nova Pulse
 (product-plan §8). 목업/design_sample의 Laser Strike, Plasma Burst, Missile Barrage,
 Frost Bomb, Black Hole, Repair Drone 등은 **아트 시안일 뿐** — 코드/데이터의 스킬 ID는
-4종으로 고정. `skills.json`의 ID는 `orbital_cut | solar_lance | gravity_slow | delta_shield`.
+5종으로 고정. `skills.json`의 ID는 `orbital_cut | solar_lance | gravity_slow | delta_shield | nova_pulse`.
 
 ---
 
@@ -94,8 +96,8 @@ product-plan §23.2 구조 위에 확장. **Phase 1**(이번 구현) vs **STUB**
     WaveGenerator.ts           [P1] 결정적 시드 RNG로 스폰 명세 생성 (랭킹 고정시드 부착 지점)
     Rng.ts                     [P1] 시드 RNG(mulberry32/xorshift) — 결정성 단위테스트 대상
     EnergySystem.ts            [P1] Earth Energy 100, 피해 적용, 게임오버 신호
-    RankingSystem.ts           [STUB] 제출/조회 인터페이스만, 로컬 noop
-    BossSystem.ts              [LATER] Phase 4~. 빈 인터페이스
+    RankingSystem.ts           [LOCAL] 로컬 랭킹 정렬 + 원격 제출 경계
+    BossSystem.ts              [P4] 보스 시퀀스/약점/파편 패턴 런타임
     Telemetry.ts               [STUB] track(event, props) noop
     RemoteConfig.ts            [P1 stub] get(key) → 로컬 /data JSON 반환 (원격 교체 대비)
     layers.ts                  [P1] L0~L13 zIndex 상수 (design §10)
@@ -103,23 +105,23 @@ product-plan §23.2 구조 위에 확장. **Phase 1**(이번 구현) vs **STUB**
     types.ts                   [P1] 공용 타입(Point, GestureResult, SpawnSpec, HitResult 등)
   /platform
     PlatformAdapter.ts         [STUB] login/ads/iap/storage/haptics 인터페이스
-    WebStubAdapter.ts          [P1 stub] 로컬 개발용 noop 구현 (Apps in Toss/Play는 LATER)
+    WebStubAdapter.ts          [P1 local] 로컬 개발 어댑터. Apps in Toss/Google Play 어댑터는 별도 경계
   /data
     enemies.json               [P1] 적 타입별 밸런스 (시작반경/접근속도/회전속도/크기/hp/피해/점수)
     scoring.json               [P1] 거리/정확도/콤보 배율, 기본 점수
     difficulty.json            [P1] 난이도별 Earth Energy, Gravity Swell 충돌반경 배율
-    skills.json                [P1 부분] 4종 스킬 메타 (Phase1은 solar_lance만 실사용)
-    bosses.json                [LATER] Phase 4
+    skills.json                [P3] 5종 스킬 메타
+    bosses.json                [legacy note] 보스 계약은 BossDefinitions.ts와 enemies.json 기준
   /i18n
     index.ts                   [P1] t(key) 로케일 라우터, ko 기본 + en
     ko.json                    [P1] 한국어 문자열
     en.json                    [P1] 영어 문자열
   /ui                          (React/HTML 래퍼 — 메뉴/결과/HUD 텍스트만, 게임필드 아님)
-    StartScreen.tsx            [P1 최소] 시작 버튼만 (모드 카드는 LATER)
-    ResultScreen.tsx           [P1 최소] 점수/생존시간 표시
+    StartScreen.tsx            [legacy] 현재 메뉴/모드 선택은 AppShell.ts 중심
+    ResultScreen.tsx           [legacy] 현재 결과 화면은 AppShell.ts 중심
     HudOverlay.tsx             [P1] 텍스트/숫자 HUD (design §6: 텍스트는 HTML/Canvas, 이미지에 굽지 않음)
-    RankingScreen.tsx          [LATER] Phase 6
-    ModeSelectScreen.tsx       [LATER] Phase 5
+    RankingScreen.tsx          [legacy] 랭킹/기록 화면은 AppShell.ts 중심
+    ModeSelectScreen.tsx       [legacy] 모드 선택/상세 화면은 AppShell.ts 중심
 ```
 
 ### 1.1 모듈 경계 핵심 결정
@@ -197,16 +199,17 @@ Phase 1 키 목록(초안 — 실제 값은 product-plan 표에서 채움):
 > 거리밴드 경계(4.0R/3.0R/2.0R/1.3R/1.2R, product-plan §4.2)도 difficulty.json 또는
 > 별도 `zones` 키로 데이터화 → Remote Config 조정 가능.
 
-### 2.4 `skills.json` (Phase 1: solar_lance만 실사용)
+### 2.4 `skills.json` (Release 5-skill set)
 ```jsonc
 {
-  "solar_lance": { "gaugeCost": 80, "cooldownSec": 12, "minLengthRatio": 0.60, "straightnessMin": 0.88, "lineToEarthMaxR": 0.6, "endpointOutsideR": 1.5 },
-  "orbital_cut":   { "gaugeCost": 100, "cooldownSec": 18, "_phase": "later" },
-  "gravity_slow":  { "gaugeCost": 100, "cooldownSec": 25, "_phase": "later" },
-  "delta_shield":  { "gaugeCost": 100, "cooldownSec": 30, "_phase": "later" },
+  "solar_lance":  { "gaugeCost": 72, "cooldownSec": 12, "hitDamage": 5 },
+  "orbital_cut":  { "gaugeCost": 92, "cooldownSec": 18, "hitDamage": 2, "radiusRatio": 4.2 },
+  "gravity_slow": { "gaugeCost": 70, "cooldownSec": 24, "durationMs": 2600, "slowMultiplier": 0.45 },
+  "delta_shield": { "gaugeCost": 82, "cooldownSec": 28, "durationMs": 3200, "absorbCount": 3 },
+  "nova_pulse":   { "gaugeCost": 64, "cooldownSec": 18, "hitDamage": 1, "radiusRatio": 2.7 },
 
-  // Phase 1 게이지 충전: scoring.json.gaugeGain의 P1 소스(일반+1/큰소행성+2/콤보+2/
-  // LastSave+8)로 채움 + 개발용 디버그 토글(제스처 판정 테스트). 빌드 플래그로만 노출.
+  // 게이지 충전은 scoring.json.gaugeGain과 live slash kill/segment 보상 경로로 채움.
+  // 개발용 디버그 토글은 DEV QA에서만 사용.
   "_debug": { "instantFillGauge": false, "infiniteGauge": false }
 }
 ```

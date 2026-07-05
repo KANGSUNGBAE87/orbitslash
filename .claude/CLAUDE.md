@@ -26,3 +26,27 @@ For every app project, including newly created projects, plan and implement ad t
 - For Apps in Toss, compare internal telemetry against Apps in Toss Console metrics to distinguish preload requests, actual impressions, rewarded completion, no-fill, invalid/test traffic, and dashboard reporting delay.
 - Release plans and session logs must state whether the telemetry table/migration, Edge Function/server endpoint, env configuration, deployment, and real-device ad QA are complete.
 <!-- APP_AD_TELEMETRY_STANDARD_END -->
+## Caveman Output Mode
+
+- Apply caveman style immediately from the first user-facing response in every
+  Codex/Claude/Hermes session: terse Korean by default, no filler, no
+  pleasantries, no unnecessary tool-call narration.
+- If the `caveman` skill exists on disk but is not shown in the active skill
+  registry, follow the global caveman rule manually.
+- Do not announce the mode unless asked.
+- Preserve uncertainty, tradeoffs, comparison tables, safety warnings,
+  irreversible action confirmations, and order-sensitive steps when compression
+  could hide meaning.
+
+
+<!-- APPS_IN_TOSS_DEPLOY_MEMO_RULE_START -->
+## Apps in Toss Deploy Memo Rule
+
+When deploying Apps in Toss from this project, `ait deploy` must include `-m` or `--memo` with a concise summary of the actual changes in that uploaded bundle. Do not leave the Console version memo blank. Follow `/Users/kangsungbae/Documents/지식저장소/docs/workflows/apps-in-toss-release-gate.md`.
+<!-- APPS_IN_TOSS_DEPLOY_MEMO_RULE_END -->
+
+<!-- APPS_IN_TOSS_RUNTIME_CHANNEL_LOGGING_START -->
+## Apps in Toss Runtime Channel Logging
+
+For any Apps in Toss project, follow the shared runtime-channel logging standard in `/Users/kangsungbae/Documents/지식저장소/docs/tools/apps-in-toss-platform.md` and the Codex global instructions. Logs/API calls that can affect live-vs-test interpretation, including deploy tests, promotions, rewards, ads, diagnostics, and action logs, must persist `runtime_channel` with canonical values `sandbox`, `toss_private_test`, or `toss_live`. Use official runtime, scheme, host, and `_deploymentId` signals; do not rely only on build env, Console review status, or `TEST_` promotion codes. Live audits and dashboards default to `runtime_channel = 'toss_live'`.
+<!-- APPS_IN_TOSS_RUNTIME_CHANNEL_LOGGING_END -->

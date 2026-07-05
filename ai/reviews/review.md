@@ -1,7 +1,7 @@
 ---
-version: 0.1
+version: 0.7
 status: active
-updated: 2026-06-29
+updated: 2026-07-05
 canonical: true
 ---
 
@@ -13,26 +13,101 @@ This is the canonical current QA/readiness backlog. It tracks deferred manual QA
 
 - 2026-06-28 (codex): Created backlog after combo timeout, same-stroke rehit, directional cut, destruction VFX, distance multiplier feedback, and Last Save feedback local implementation.
 - 2026-06-28 (codex): Updated after wave shaping, low-frequency directional enemy, Gravity Slow, 5-slot HUD readiness, backend/ranking draft, release boundary scan, and platform notes. DEV-only QA harness remains deferred as QA work.
-- 2026-06-28 (codex): Updated after Gravity Slow reserve fix, inactive HUD slot gauge fix, directional/heavy anti-streak, top HUD spawn safety, DEV QA presets, SVG enemy sprite pass, hybrid ranking decision, and remote dormant Supabase schema apply.
+- 2026-06-28 (codex): Updated after Gravity Slow reserve fix, inactive HUD slot gauge fix, directional/heavy anti-streak, top HUD spawn safety, DEV QA presets, SVG enemy sprite pass, hybrid ranking decision, and dormant Supabase schema work. Current remote state must be reverified before release evidence use.
 - 2026-06-28 (codex): Updated after 8-tier enemy data, 10-second wave gauge, 60-second fixed-speed boss scaffold, stronger Solar Lance, large top 5-slot HUD, and high-HP crack/hit overlay implementation.
 - 2026-06-28 (codex): Updated after subagent review fixes for deterministic boss scheduling, large-enemy top-HUD spawn safety, i18n seconds labels, and explicit Solar Lance/HUD/boss tests.
 - 2026-06-28 (codex): Updated after enemy asset pass, user-provided `eclipse_core` boss image integration, boss HP `50`, boss radius `340`, unique 9-enemy asset mapping, and type-colored crack/sparkle hit overlays.
 - 2026-06-29 (codex): Updated after live slash kills now commit score/gauge immediately during continuous dragging, so Solar Lance can charge without waiting for pointer release.
+- 2026-06-29 (codex): Updated after multitouch guard plus design-sample image extraction for Earth core/shield and all 8 normal enemy PNG sprites.
+- 2026-06-29 (codex): Updated after enemy liveliness pass: self rotation, subtle breathing, comet trail/glow, travel-direction orientation, and stronger overlay-only non-lethal hit feedback.
+- 2026-06-30 (codex): Updated after skill release hit-history fix: Solar Lance and Gravity Slow now judge the final gesture shape even if the stroke already hit enemies.
+- 2026-06-30 (codex): Updated after HUD priority pass: time moved to top center, wave gauge thickened, Earth energy moved to thick bottom full-width bar, 7-second wave cadence applied, Solar Lance cost lowered to 72, and boss warning/remaining-hit HUD added.
+- 2026-07-01 (codex): Updated after Phase 0-4 core implementation pass: mode contracts, `RunConfig`-driven `GameScene`, Orbital Cut, Delta Shield, special object contract, five boss definitions, app shell, and local progression storage.
+- 2026-07-04 (codex): Updated after P0/P1/P2 implementation pass: special objects became protect/avoid judgment objects, Delta Shield persistent HUD was added, boss weak-point positional resolver and weak-point overlays were wired, 60s Blitz bands/Story 1-3/Daily modifier contracts were added, and ranked server-stub remains non-public.
+- 2026-07-05 (codex): Updated after DEV QA recorder pass: all four human carryover QA scenarios now appear in the DEV QA screen, local PASS/PEND state is stored separately, DEV QA runs are marked `devQa`, progression writes are blocked for QA runs, and result screens label QA runs as `progress off`.
+- 2026-07-05 (codex): Updated after Story/Daily objective runtime pass: `ModeObjectiveSystem` now evaluates Story 1-3, Daily no-skill/rescue/Last Save pass/fail conditions, GameScene tracks protected-object success/failure counters, and Daily can emit `daily_challenge_failed`.
+- 2026-07-05 (codex): Updated after ranked server-boundary pass: `GameApp` now begins ranked runs through `BackendAdapter`, `GameScene` only honors server-verified starts for `rankingEligible`, ranked retry drops stale server config, public ranked validation checks token/expiry/seed/difficulty/stat sanity, and Supabase Edge Function/migration drafts were added locally.
+- 2026-07-05 (codex): Updated after ranked semantic replay pass: `RunSession` records kill/combo-break/skill trace, enemies carry run-local `spawnOrdinal`, public ranked submit requires replay trace, `RankedReplayValidator` replays scoring summaries and boss-delayed spawn ordinals, and the Edge draft now replays semantic score summaries before inserting verified scores.
+- 2026-07-05 (codex): Updated after ranked source/segment geometry pass: replay kill events now carry hit source and cloned segment data, and local/Edge validators check slash/Solar Lance/directional/boss weak-point geometry.
+- 2026-07-05 (codex): Updated after ranked damage/HP progression pass: replay traces now include `hitEvents`, validators replay non-lethal HP damage history, and killEvents must match the HP-derived kill sequence.
+- 2026-07-05 (codex): Updated after Threat/ModeResult/Story-Daily/Boss identity closure: periodic boss threat now advances from kills, combo, Last Save, and boss weak hits; Delta Shield knocks bosses back instead of instantly defeating them; Story expanded to 1-5; Daily expanded to five modifiers; `ModeResult` and `ProgressStore` now carry mode-specific result/progression metadata; HUD shows always-on Threat.
+- 2026-07-05 (codex): Updated after Free Defense/Boss Rush mode-completion pass: Free Defense now has difficulty selection, standard/skill-practice/boss-practice presets, practice runs are non-progress, standard runs are gated by a daily free-play limit, mode cards render in a 3x2 grid, and Boss Rush detail/result surfaces emphasize sequence, weak points, local-unranked status, and best boss count.
+- 2026-07-05 (codex): Updated after Story full-plan pass: Story now has 8 chapters x 4 stages, 32 fixed seeds, tutorial keys, stage objective params, Story stage launch option, seed mismatch fail-fast behavior, final-stage unlock cap, and Story detail preview for selected stage/tutorial/unlock summary.
+- 2026-07-05 (codex): Updated after in-game tutorial pass: `GameApp` now forwards selected Story stage launch options, Story stages render live HUD tutorial callouts, Boss Rush renders active weak-point tutorial copy from boss phase state, and i18n parity tests cover Story/Boss tutorial keys.
+- 2026-07-05 (codex): Updated after Boss Pattern Batch A micro-pass: blocked boss-body hits now show weak-point-only feedback, and Ringed Destroyer shard warnings render fan-shaped telegraph lanes before shard spawn.
+- 2026-07-05 (codex): Updated after P0 AppShell contract cleanup: settings opens a locale switcher, static shell screens rebuild on locale change, records/results/collection use canonical mode/boss/daily labels, progress summaries are localized, and i18n parity now covers shell/progress/result keys.
+- 2026-07-05 (codex): Updated after Phase 4 closure batch: AppState now starts at `boot`, moves through loading/ready, bootstrap mounts GameApp before remote/config asset preload so the loading shell can render, settings routes through AppState, and safe-area/root-fit tests cover shell controls and mobile viewport scaling.
+- 2026-07-05 (codex): Updated after P0-A enemy pool/replay alignment: advanced enemy variants now have authored metadata/visuals/wave overlays, split/shield/armor/graviton runtime hooks exist, ranked traces record runtime spawn events and absorbed hits, local validator accepts split children and shield/armor honest traces, and ranked disables graviton pull until server replay can reproduce pull geometry.
+- 2026-07-05 (codex): Updated after Boss Pattern Batch B: boss shard attacks now use active phase pattern profiles, Eclipse/Ringed/Lava/Ice/Dark bosses have themed attack spawn identities, phase changes emit one-shot `phase_action` bursts through replay-aware boss-shard spawning, telegraphs carry phase/pattern metadata, and Lava Titan body damage is locked behind core/heart weak points.
+- 2026-07-05 (codex): Updated after Boss Practice / Ranked hardening pass: Free Defense Boss Practice can pin any release boss, DEV QA URL accepts `qaBoss`, Ranked detail exposes Rookie/Defender/Elite/Master tabs, ranked retry returns for a fresh token, ranked weekly seeds use KST Monday 06:00 windows, and local/Edge replay rejects invalid boss-shard type/time claims.
+- 2026-07-05 (codex): Updated after revive/leaderboard boundary pass: Free Defense ad revive now renders as disabled/adapter-gated with no reward CTA, records expose a verified-leaderboard locked/live boundary state, backend adapters expose leaderboard status, and the local Edge draft rejects ranked score inserts without `core_user_id`.
+- 2026-07-05 (codex): Updated after outcome/limit/ad-contract pass: ranked backend submit outcome can update result UI to `submitted`/`failed`, Free Defense standard 5/5 now shows explicit locked copy while practice remains startable, and rewarded-ad platform/backend contracts now separate capability, reward earned, dismissed, and telemetry-not-configured states.
+- 2026-07-05 (codex): Updated after rewarded telemetry draft pass: local `orbitslash_rewarded_ad_events` migration, dedicated `orbitslash-rewarded-ad-telemetry` Edge Function draft, source guards for RLS/sensitive payload rejection, and Supabase adapter routing to the dedicated endpoint now exist. Remote apply/deploy is still pending.
+- 2026-07-05 (codex): Updated after revive readiness gate pass: ad telemetry endpoint configuration no longer implies remote readiness, default Supabase adapters keep rewarded telemetry disabled until `VITE_REWARDED_AD_TELEMETRY_REMOTE_ENABLED=true`, and `GameApp` passes platform/backend readiness into Free Defense detail.
+- 2026-07-05 (codex): Updated after release-prep / leaderboard rows pass: `preflight:release` now runs release-boundary plus both Edge bundle checks, and public leaderboard rows have a gated adapter/UI/Edge contract that stays disabled until `VITE_PUBLIC_LEADERBOARD_ENABLED=true` and identity-bound verified rows exist.
+- 2026-07-05 (codex): Updated after boss readability / Remote Config / rejected-run debug pass: boss definitions now carry visual themes, active weak points render phase/zone-aware markers, boss shard telegraphs use per-boss colors, Dark Planet is weak-point-only to match false/true-core copy, Remote Config can fetch/fallback behind an explicit flag, and ranked rejected-run diagnostics have an admin-only Edge draft plus migration.
+- 2026-07-05 (codex): Updated after gameplay telemetry / platform adapter pass: added dedicated gameplay telemetry migration and Edge draft with CORS, remote-enable gate, sensitive payload rejection, ranked run identity binding, raw identity release-boundary guard, and injected Apps in Toss / Google Play platform adapter shells for login, ads, IAP, haptics, storage, and analytics.
+- 2026-07-05 (codex): Updated after release-claim guard pass: i18n copy, package metadata, Records live hints, and DEV QA labels now have automated checks against misleading global ranking, cross-device sync, live ad/IAP, and store-ready claims before remote/platform evidence exists.
+- 2026-07-05 (codex): Updated after automated mode-matrix hardening pass: Story locked-stage/raw-id guards, ranked local-only result boundary, Blitz survived result semantics, Daily fail cases, failed Story/Daily non-progression, Boss Rush runtime sequence display, and result energy display are covered locally.
+- 2026-07-05 (codex): Updated after result-title closure pass: result overlay titles now distinguish clear, survived, and game-over outcomes; Daily failed-protect/missing-Last-Save/Master-Trial edge cases are covered by tests; Phase 4 QA mode-flow wording now matches the detail-start UX.
+- 2026-07-05 (codex): Updated after release-build polish: Vite chunk-size warning is cleared by raising the Pixi-game warning threshold to 600 kB without manual chunk cycles.
+- 2026-07-05 (codex): Updated after local mode-detail guard pass: Story detail selected-stage/tutorial/unlock summary and Ringed Destroyer ring/body/core tutorial copy are covered by local automated tests; real-device readability checks remain open.
+- 2026-07-05 (codex): Updated after blocked weak-point feedback hardening: weak-point-locked boss body hits now trigger a dedicated persistent callout with title/detail text, and local tests cover visibility, duration, and GameScene wiring.
+- 2026-07-05 (codex): Updated after Story/Daily content-profile pass: Story and Daily active content profiles now affect skills, special objects, boss timing/type, spawn pressure, and enemy weight bias; disabled skills no longer fire from release gestures; directional wrong-angle rejects now show a distinct short burst.
+- 2026-07-05 (codex): Updated after Last Save feedback pass: danger/Last Save hit feedback now separates radius, particles, ring width, label scale, and life duration more clearly while preserving score logic.
+- 2026-07-05 (codex): Updated after boss phase pressure and special-object motion pass: active boss phases now feed conservative normal-wave pressure, friendly rescue objects drift toward Earth, and satellites orbit while capsules/mines remain static.
+- 2026-07-05 (codex): Updated after release target SSOT / target-boundary pass: `ReleaseTarget.ts` now records local-web / Google Play-first / Apps in Toss-compatible target status, docs/package alignment is tested, and release preflight runs generic plus target-specific scans.
+- 2026-07-05 (codex): Updated after product-plan release target addendum: `product-plan.md` now preserves the original Apps in Toss plan while explicitly pointing current execution to `ReleaseTarget.ts`.
+- 2026-07-05 (codex): Updated after local-readiness closure pass: gameplay telemetry now flushes through `BackendAdapter.trackEvent`, collection UI reads stored boss/special/title progress, `PlatformAdapterFactory` injects web/Apps in Toss/Google Play adapters, ranked Edge requires `VITE_RANKED_EDGE_REMOTE_ENABLED=true`, telemetry `ready` requires remote write verification, and release preflight wording is local-only.
+- 2026-07-05 (codex): Updated after verification reconciliation: boss asset preload tests now reject fallback URLs, release-boundary misleading-claim scans have direct typed coverage, and full local verification passed at 78 files / 487 tests.
+- 2026-07-05 (codex): Updated after platform telemetry context pass: platform adapters now expose runtime context, GameScene gameplay telemetry carries web/Apps in Toss/Google Play runtime metadata, Apps in Toss private/live/sandbox channel detection is covered, and Google Play telemetry is allowed without Toss runtime_channel.
+- 2026-07-05 (codex): Updated after read-only remote Supabase reverify: remote currently has only `orbitslash_runs` and `orbitslash_scores`, both RLS-on with no public policies or anon/authenticated grants; 2026-07-05 local tables/functions are not deployed remotely.
+- 2026-07-05 (codex): Updated after local gap closure: Boss Weak DEV QA now uses deterministic `blockedBody`, ranked Graviton pull has a GameScene-level replay guard, special-object hit/reward labels are type-specific, HUD tutorial/blocked panel geometry has local guards, stale implementation-plan wording was cleaned, and full local verification passed at 78 files / 494 tests.
 
 ## Current State
 
-- Latest gameplay batch includes 8-tier assets, `hp=50` boss scaffold, large 5-slot HUD, and live slash immediate kill rewards.
+- Latest local gameplay batch includes 8-tier image assets, eight advanced enemy variants (`fire_meteor`, `ice_comet`, `crystal_meteor`, `shield_rock`, `electric_meteor`, `graviton_core`, `dark_meteor`, `armored_fragment`), advanced SVG enemy assets, sprite Earth core/shield, `hp=50` boss runtime, always-on Threat HUD, warning/remaining-hit HUD, five boss definitions with distinct Ring/Lava/Ice/Dark phase/objective/weak-point contracts, weak-point positional resolver, phase/zone-aware weak-point visual markers, weak-point-only blocked-hit feedback, dedicated blocked weak-point callout title/detail panel, separate active boss objective HUD line, Ringed Destroyer shard telegraph lanes, per-boss shard telegraph colors, phase-aware boss shard profiles, one-shot boss `phase_action` bursts, boss phase-driven normal wave pressure, Lava Titan core/heart weak-point-only body lock, Dark Planet weak-point-only false/true-core lock, themed boss attack enemies, Free Defense Boss Practice selectable boss targets, DEV `qaBoss` URL entry, live Story tutorial callouts, Boss Rush weak-point tutorial callouts, large 5-slot HUD, persistent Delta Shield HUD with boss knockback instead of boss instakill, 7-second base wave cadence, mode-specific wave overlays, content-profile enemy weight bias, 60s Blitz 10-second bands, thick bottom Earth energy bar, stronger danger/Last Save feedback duration/radius, live slash immediate kill rewards, skill-responsive periodic boss threat from kills/combo/Last Save/bossWeak hits, single-pointer input guard, visual-only enemy motion layers, moving friendly rescue/satellite special objects, hit-history-independent skill release checks with enabled-skill enforcement, five release skills including Nova Pulse, protect/avoid special objects, Story 8x4 stage plan with tutorial keys, selected-stage launch, and active content profiles, five Daily modifiers with active content profiles plus pass/fail evaluation, Free Defense difficulty/practice/daily-limit/ad-revive-locked contracts, Free Defense standard-limit locked UX with practice still startable, Ranked difficulty tabs, ranked KST weekly seed policy, ranked fresh-token retry policy, ranked submit outcome UI updates, verified-leaderboard locked boundary UI, gated public leaderboard row contract, Boss Rush local sequence/result/progression surfacing, 3x2 mode card layout, localized AppShell boot/loading/settings/records/results/collection/progress surfacing, root-fit safe-area support, mode-specific `ModeResult` metadata, Story/Daily progression storage, mode contracts, app shell, local progression storage, DEV-only QA recorder/progression isolation, local ranked server-boundary wiring, ranked semantic replay validation, ranked source/segment geometry validation, ranked damage/HP progression replay, ranked runtime spawn trace, ranked shield/armor absorbed-hit replay, rewarded-ad capability/telemetry stubs, local rewarded telemetry Edge/table draft, remote-enable rewarded telemetry gate, local gameplay telemetry Edge/table draft, gameplay telemetry CORS and ranked run identity binding, raw identity release-boundary guard, injected Apps in Toss / Google Play platform adapter shells, release-target SSOT with docs/package alignment tests, release-claim guard tests for user-facing copy and package metadata, Remote Config fetch/fallback gated by `VITE_REMOTE_CONFIG_ENABLED`, `preflight:release` generic plus Google Play/Apps in Toss target scans, and ranked boss-shard/identity/leaderboard/rejected-run guards in local validator plus Edge draft.
+- Local gap-closure addendum: `?qaPreset=blockedBody` now gives a deterministic blocked boss-body QA state, special-object hit/reward labels are type-specific, ranked Graviton pull has a GameScene-level replay guard, and HUD tutorial/blocked-panel geometry has local non-overlap guards.
 - Automated verification passed for the latest local state:
-  - `npm test`: 32 files / 169 tests passed.
-  - `npm run build`: passed.
-  - `npm run preflight:release-boundary`: passed.
-  - Production bundle string check: no `qaPreset` / `qaGauge` strings found in `dist`.
-  - Local Chrome mobile smoke: not rerun after this latest gameplay batch.
+  - `npm test -- --run`: 78 files / 494 tests passed on 2026-07-05 after blocked-body QA preset, ranked Graviton guard, special-object feedback labels, and HUD geometry guards.
+  - Focused Boss Pattern Batch B regression: 5 files / 41 tests passed for boss definitions, boss runtime, telegraph metadata, GameScene boss integration, and ranked replay guard.
+  - Focused P0-A regression: 10 files / 74 tests passed for enemy balance, wave generator, enemy visual, enemy/object manager, ranked replay, boss/mode integration.
+  - Focused shell bootstrap check: 6 files / 49 tests passed on 2026-07-05 after Phase 4 shell closure.
+  - `npm run build`: passed on 2026-07-05 after local-readiness closure. Vite chunk-size warning is cleared with the Pixi-game threshold at 600 kB.
+  - `npm run preflight:release`: passed on 2026-07-05 after blocked-body/HUD guard updates; it runs generic, Google Play target, and Apps in Toss target boundary scans plus Edge draft bundle checks. Deno check was skipped because Deno is not installed in PATH.
+  - `git diff --check`: passed on 2026-07-05 after blocked-body/HUD guard updates.
+  - AppShell automated six-mode start smoke: Story, Free Defense, Ranked, Boss Rush, 60s Blitz, and Daily detail screens emit the expected start payloads.
+  - Automated mode-matrix hardening: Story locked-stage selection stays on the unlocked stage and hides raw ids, Story detail preview covers selected-stage/tutorial/unlock summary, ranked local runs end as `localOnly`, Blitz timer expiry is `survived`, failed Story/Daily runs do not advance progression, Daily failed-protect/missing-Last-Save/Master-Trial fail cases are covered, result titles distinguish clear/survived/game-over, Boss Rush detail uses runtime sequence order, and Ringed Destroyer tutorial copy covers ring/body/core phase transitions.
+  - Blocked weak-point feedback guard: `GameScene` calls the dedicated blocked callout for `boss_body_locked` hits, DEV `?qaPreset=blockedBody` reproduces the callout deterministically, and `Hud` keeps the callout visible longer than the generic banner with wrapped title/detail copy and non-overlapping panel geometry.
+  - Content-profile guard: Story/Daily active content profiles change enabled skills, special-object mix, boss timing/type, spawn pressure, and enemy weight bias; disabled release skills are not evaluated by `GameScene`.
+  - Boss/special-object motion guard: active boss phase `spawnWeightMul` conservatively reduces normal wave intervals, friendly rescue drifts toward Earth, satellites orbit, and capsules/mines stay static.
+  - Release-target guard: package/docs align with `RELEASE_TARGET_PLAN`, and target-specific release-boundary scans block Toss miniapp-only APIs from Google Play target code and Google Play store/billing-only references from Apps in Toss target code.
+  - Edge Function draft syntax/bundle checks for `orbitslash-ranked-run`, `orbitslash-rewarded-ad-telemetry`, and `orbitslash-gameplay-telemetry` with `npx esbuild ... --external:https://esm.sh/@supabase/supabase-js@2`: passed through `preflight:release`.
+  - Focused ranked boundary check: 4 files / 27 tests passed for validator, run-session hit/kill trace copy, backend validation, and Edge adapter.
+  - `deno check`: skipped by `preflight:release` because Deno CLI is not installed in current PATH.
+  - Graphify refreshed: 3232 nodes / 346877 edges after local gap closure and final blocked-body path update.
+  - cmm refreshed via CLI after MCP transport failure: `Users-kangsungbae-Documents-orbitslash` ready with 3284 nodes / 6878 edges.
+  - Local dev server visual smoke: `http://127.0.0.1:5191/` rendered current local app at 390x844, launched gameplay from home, and reported no app console errors before server shutdown.
+  - Historical browser visual smoke: mobile 390x844 DEV QA launcher, Blitz, Boss Weak, and Special buttons launch the matching QA mode/preset and render with no console warnings/errors on `http://127.0.0.1:5187/`.
+  - Production bundle string check: no `qaMode` / `qaPreset` / `qaGauge` strings found in `dist`.
+  - 2026-07-05 Playwright browser smoke against `http://127.0.0.1:5188/`: DEV QA recorder stored `{"boss":true}` state, launched `?qaMode=bossRush&qaPreset=boss&qaGauge=100&seed=1234`, and reported no console/page errors.
+  - 2026-07-05 in-app browser mobile smoke against `http://127.0.0.1:5194/` at 390x844: Story detail spacing fix showed selected stage/tutorial/unlock summary without visible overlap, Story gameplay tutorial stayed below the playfield/top HUD, Boss Rush QA preset showed weak-point tutorial copy, and no console warnings/errors were reported. A blocked-hit readability smoke was attempted but not counted as evidence because it did not clearly prove the wrong-body-hit feedback state.
   - GitHub Pages live smoke: not rerun after this latest gameplay batch.
-- DEV-only QA presets are available for local device checks:
+- Previous pre-app-shell local browser evidence remains historical only:
+  - `http://127.0.0.1:5182/?seed=1234&qaPreset=dense&qaGauge=100` returned HTTP 200 and rendered one canvas before the Phase 0-4 app-shell pass.
+- DEV-only raw query presets are available for local device checks:
   - `?qaPreset=directional&qaGauge=100`
   - `?qaPreset=lastSave&qaGauge=100`
   - `?qaPreset=dense&qaGauge=100`
+  - `?qaPreset=boss&qaGauge=100`
+  - `?qaPreset=blockedBody&qaGauge=100`
+  - `?qaPreset=special&qaGauge=100`
+- DEV QA launcher buttons route to mode/preset pairs:
+  - `Touch/HUD` -> dense free-defense QA.
+  - `Boss Weak` -> boss-rush blocked-body QA.
+  - `Special` -> special-object QA.
+  - `Blitz` -> 60s Blitz QA.
+- Focused Phase 0-4 QA record: `ai/reviews/phase0-4-qa-checklist.md`.
 
 ## QA Backlog
 
@@ -54,6 +129,7 @@ This is the canonical current QA/readiness backlog. It tracks deferred manual QA
 - [ ] Directional guide line on `directional_comet` should be visible on phone without hiding the enemy.
 - [ ] Required slash direction should feel learnable and fair while the enemy orbits.
 - [ ] Wrong-direction reject burst should read as "wrong angle", not as a successful hit.
+- [x] Local automated guard: wrong-direction rejects spawn a distinct `directional.wrongAngle` short burst and do not damage or score the enemy.
 - [ ] Wrong-direction reject should not feel too punishing when it also breaks combo on an otherwise empty stroke.
 - [ ] Solar Lance directional behavior: confirm whether directional enemies should reject wrong-angle Solar Lance or whether Solar Lance should be a special override.
 
@@ -68,7 +144,7 @@ This is the canonical current QA/readiness backlog. It tracks deferred manual QA
 ### P0 — Solar Lance QA
 
 - [ ] Public production build: charge gauge naturally and trigger Solar Lance on live GitHub Pages.
-- [ ] Local DEV build: verify `?qaGauge=100` still helps QA without affecting production.
+- [x] Local DEV build: verify `?qaGauge=100` still helps QA without affecting production.
 - [ ] Solar Lance long line should fire only on intended straight/earth-linked gesture.
 - [ ] Solar Lance should not be stolen by normal live slash hits while charging the gesture.
 - [ ] Solar Lance widened effect should feel powerful without deleting too much of the screen.
@@ -76,14 +152,21 @@ This is the canonical current QA/readiness backlog. It tracks deferred manual QA
 
 ### P0 — Wave and Boss Feel
 
-- [ ] 10-second wave gauge should be readable and not distract from enemy motion.
-- [ ] Wave boundary every 10 seconds should feel like progression, not abrupt difficulty spikes.
-- [ ] Boss should appear every 60 seconds at fixed speed.
-- [ ] Boss arrival should not stop normal small planets from spawning.
+- [ ] 7-second wave gauge should be readable and not distract from enemy motion.
+- [ ] Wave boundary every 7 seconds should feel like progression, not abrupt difficulty spikes.
+- [ ] Advanced variants: fire/ice/crystal/shield/electric/graviton/dark/armored enemies should read as distinct threats on phone.
+- [ ] Ice split: killing `ice_comet` should clearly spawn shard fragments without feeling unfair.
+- [ ] Shield/armor: absorbed hits should visibly register as shield/armor damage, not as missed input.
+- [ ] Graviton pull: non-ranked pull acceleration should feel readable; ranked currently gates pull off for replay safety.
+- [x] Local automated guard: ranked `GameScene` movement keeps Graviton pull disabled while non-ranked movement still applies pull acceleration.
+- [x] Boss should appear every 60 seconds at fixed speed.
+- [x] Boss arrival should not stop normal small planets from spawning.
 - [ ] First boss HP 50 should feel boss-like but not tedious.
 - [ ] Boss image should read as a boss immediately and not blend into normal large planets.
 - [ ] Boss non-lethal hits should feel clearly registered despite the long 50-hit scaffold.
-- [ ] Add/verify boss HP bar or remaining-hit indicator before treating the 50-hit boss as final-feel ready.
+- [ ] Boss phase-driven normal wave pressure should feel energetic without overloading Boss Rush or dense Daily runs.
+- [ ] Verify boss warning and remaining-hit HUD on real device before treating the 50-hit boss as final-feel ready.
+- [x] Verify Ringed Destroyer shard telegraph lanes point in the expected fan direction before shards spawn.
 
 ### P1 — Visual Noise and Performance
 
@@ -94,12 +177,51 @@ This is the canonical current QA/readiness backlog. It tracks deferred manual QA
 - [ ] Top HUD area: enemies should not become unreadable behind score/cooldown UI.
 - [ ] Confirm top-HUD safe spawn adjustment does not make enemy entry feel artificially constrained.
 - [ ] Large 5-slot HUD should fit on real mobile browser/WebView with status/address bars.
+- [ ] Bottom full-width Earth energy bar should remain readable without covering thumb input flow.
+- [ ] Moving rescue/satellite objects should read as protect/avoid targets, not as enemy planets.
 
 ### P1 — Earth and Impact Feel
 
 - [ ] Huge enemies should not visually overlap Earth too much before impact damage.
 - [ ] Earth impact radius should still feel centered and fair after large enemy visual radius changes.
 - [ ] Earth body size should remain slightly larger than early version, but not dominate the play area.
+
+## Mode QA Matrix
+
+### Story
+
+- [ ] Verify Story detail shows 8 chapters, 32 stages, selected stage, tutorial preview, and unlock summary on phone.
+- [x] Local automated guard: Story detail shows 8 chapters, 32 stages, selected stage, tutorial preview, unlock summary, and no raw stage id leak.
+- [x] Local mobile-browser smoke: Story detail at 390x844 shows the selected stage, tutorial preview, unlock summary, stage buttons, start CTA, and no console warnings/errors after the layout spacing fix.
+- [x] Verify Story stage selection starts the selected fixed seed and retry preserves the same stage.
+- [x] Verify clearing a stage unlocks only the next valid stage.
+- [x] Verify clearing `story-32` does not unlock invalid stage `33`.
+- [x] Verify unknown Story seeds fail fast instead of evaluating `story-1`.
+- [x] Verify Story result/records show localized stage labels instead of raw ids.
+- [ ] Verify live Story tutorial callouts are readable and do not hide touch targets on phone.
+- [x] Local mobile-browser smoke: Story gameplay tutorial callout is visible at 390x844, stays below the playfield/top HUD, and reports no console warnings/errors.
+- [x] Decide later whether Story needs a modal pause/dismiss tutorial; current implementation is non-modal for the release slice, modal tutorial is a later UX option.
+
+### Free Defense
+
+- [ ] Verify Rookie/Defender/Elite/Master selection changes early density and boss pressure feel.
+- [x] Verify Standard preset writes local records and increments today's free-play count.
+- [x] Verify Skill Practice gives more supply objects and does not write progression.
+- [x] Verify Boss Practice brings the first boss faster and does not write progression.
+- [x] Verify today's free-play limit blocks standard starts but still allows practice presets.
+- [x] Verify ad revive remains blocked until rewarded-ad telemetry and platform adapter work are ready in local automated tests.
+
+### Boss Rush
+
+- [x] Verify mode detail shows the full five-boss sequence and weak-point hint before start.
+- [x] Verify Boss Rush starts with Ringed Destroyer and then advances through the sequence.
+- [x] Verify results show boss count, defeated list, survival, energy, score, and local-unranked state.
+- [x] Verify local records prioritize best defeated boss count.
+- [ ] Verify Boss Rush weak-point tutorial callouts match ring/body/core phase transitions on phone.
+- [x] Local automated guard: Boss Rush tutorial state maps Ringed Destroyer ring/body/core phases to localized objective copy.
+- [x] Local mobile-browser smoke: Boss Rush QA preset at 390x844 shows the weak-point tutorial callout and boss overlay with no console warnings/errors.
+- [x] Local automated guard: weak-point-locked wrong body hits call the dedicated blocked callout, and the HUD callout remains readable beyond the generic flash duration.
+- [ ] Verify wrong body hits on weak-point-locked bosses clearly read as blocked, not as missed input on real device/WebView. Browser automation attempted this path, but canvas drag injection did not produce a clear wrong-body-hit capture.
 
 ## Implementation Backlog
 
@@ -125,11 +247,12 @@ Goal:
 
 Tasks:
 - [x] Add wave composition rules instead of uniform enemy selection.
-- [x] Add 10-second wave bands for enemy mix and speed shaping.
+- [x] Add 7-second wave bands for enemy mix and speed shaping.
 - [x] Lower heavy density early via wave bands.
 - [x] Add top HUD spawn exclusion / safe start-angle rule.
 - [x] Add deterministic DEV presets for common QA waves.
-- [x] Add wave HUD state/progress for 10-second waves.
+- [x] Add wave HUD state/progress for 7-second waves.
+- [x] Lower Solar Lance gauge cost from 80 to 72 for earlier first-use timing.
 
 ### 3. DEV-only QA Harness
 
@@ -140,7 +263,12 @@ Tasks:
 - [x] Add deterministic near-Earth Last Save preset in DEV only.
 - [x] Add deterministic directional enemy preset in DEV only.
 - [x] Add dense enemy mix preset in DEV only.
-- [ ] Add production build string/behavior check proving QA params are ignored outside DEV.
+- [x] Add direct QA mode entry and DEV QA launcher for `Touch/HUD`, `Boss Weak`, `Special`, and `Blitz`.
+- [x] Add local PASS/PEND recorder for remaining real-device carryover QA.
+- [x] Prevent DEV QA runs from writing progression/unlocks/collection.
+- [x] Mark DEV QA result screens as `progress off`.
+- [x] Add production bundle string check proving `qaMode`, `qaPreset`, and `qaGauge` are not present in `dist`.
+- [x] Add browser automation smoke for the QA recorder after installing the matching Playwright Chromium build.
 
 ### 4. Skill System Expansion Toward 5 Slots
 
@@ -154,8 +282,8 @@ Tasks:
 - [x] Add input gesture, cooldown, gauge cost, VFX, tests, and HUD state for `gravity_slow`.
 - [x] Fix Gravity Slow live reserve so open spiral-like gestures do not steal normal slash.
 - [x] Hide gauge progress on inactive future HUD slots.
-- [x] Keep a 5th `reserve_slot` placeholder instead of inventing an unapproved skill.
-- [ ] Decide canonical final 5-skill list.
+- [x] Promote Nova Pulse as the canonical 5th release skill.
+- [x] Decide canonical release skill list: Solar Lance, Orbital Cut, Gravity Slow, Delta Shield, Nova Pulse.
 
 ### 5. Asset Replacement Pass
 
@@ -171,6 +299,7 @@ Tasks:
 - [x] Add type-colored crack/sparkle overlay tokens for stronger hit readability.
 - [x] Keep `enemy.radiusPx` as slash hit bounds while sprites scale to that radius.
 - [x] Keep directional guide overlay readable on final assets.
+- [x] Add visual-only enemy motion layers: self rotation, subtle breathing, comet travel trail/glow, and hit overlay sparks.
 - [ ] Re-test visual size and hit feel after asset swap.
 
 ### 6. Result, Ranking, and Backend Readiness
@@ -184,8 +313,18 @@ Tasks:
 - [x] Draft Supabase tables and server verification notes before public ranking writes.
 - [x] Keep Apps in Toss and Google Play adapters separate from product logic via release-boundary scan.
 - [x] Public ranking strategy selected: hybrid, Supabase verified ranking primary, Apps in Toss leaderboard bridge-ready.
-- [x] Remote dormant Supabase schema applied and hardened.
-- [ ] Implement Edge/server ranked run validation before public ranking copy or UI.
+- [x] Dormant Supabase schema and RLS/service-role separation contract exists in local SQL/historical notes.
+- [x] Reverify current remote dormant Supabase schema/RLS state before using it as release evidence: current remote has only `orbitslash_runs` and `orbitslash_scores`; latest local telemetry/rejection tables are not applied.
+- [x] Implement local Edge/server ranked run validation before public ranking copy or UI.
+- [x] Add local ranked semantic replay validation.
+- [x] Add local and Edge source/segment geometry validation for slash, Solar Lance, directional, and boss weak-point hit claims.
+- [x] Add local and Edge damage/HP progression replay before accepting killEvents.
+- [ ] Remote apply/deploy ranked Edge Function.
+- [x] Local Edge draft rejects ranked score inserts when `core_user_id` is missing.
+- [ ] Verify remote ranked runs/scores bind to internal `core_user_id` before public leaderboard launch.
+- [x] Verify public leaderboard row UI remains hidden until explicit public flag plus identity-bound verified rows.
+- [x] Add server-side gameplay telemetry route local draft behind explicit remote-enable flag and connect local gameplay flushes through `BackendAdapter.trackEvent`.
+- [x] Confirm raw Toss userKey / raw platform identity fields are blocked from client release boundary and Edge payloads.
 
 ### 7. Platform and Release Readiness
 
@@ -194,11 +333,12 @@ Goal:
 
 Tasks:
 - [x] Add local release checklist and release-boundary preflight.
-- [ ] Apps in Toss pre-release gate with official-doc re-check.
-- [ ] Google Play-first game release prep if rating/classification requires it.
+- [x] Add injected Apps in Toss / Google Play adapter shells for login, ads, IAP, haptics, storage, and analytics.
+- [x] Apps in Toss pre-release gate with official-doc re-check.
+- [x] Google Play-first game release prep draft for rating/classification, data safety, target audience, and store-copy positioning.
 - [ ] Real-device browser/WebView QA.
 - [ ] Touch latency/performance check.
-- [ ] Privacy/data safety and platform adapter review.
+- [x] Privacy/data safety and platform adapter draft review.
 
 ### 8. Boss Scaffold
 
@@ -212,19 +352,23 @@ Tasks:
 - [x] Keep boss speed fixed outside wave speed scaling.
 - [x] Add tests for boss schedule and speed.
 - [x] Retune first boss scaffold to `hp=50`, `radiusPx=340`, and user-provided image.
-- [ ] Add boss arrival warning/banner.
-- [ ] Add boss HP bar or remaining-hit indicator.
-- [ ] Add real boss weak points / multi-part boss behavior.
-- [ ] Add final boss weak-point/pattern art assets.
+- [x] Add boss arrival warning/banner.
+- [x] Add boss HP bar or remaining-hit indicator.
+- [x] Add real boss weak points / multi-part boss behavior.
+- [x] Add phase-aware weak-point/pattern readability art layer.
+- [ ] Replace final boss bitmap/VFX assets when the final art set is provided or approved.
 
 ## Recommended Next Implementation
 
-Start with **real-device gameplay QA on the new local build**, then tune values before server/ranking work.
+Start with **remote release prep + UX/content polish**, while keeping real-device boss QA queued.
 
 Default recommendation:
-- Run one physical-device pass against the latest local build.
-- Focus on new enemy image readability, `hp=50/radius=340` boss feel, boss non-lethal hit feedback, 10-second wave gauge, Solar Lance access, and large top 5-slot HUD.
-- Next implementation should add boss arrival warning + boss HP/remaining-hit UI, then proceed to 7-second wave/Solar Lance charge tuning.
+- Do not enable revive CTA yet; local readiness now stays disabled until platform rewarded ads are ready and rewarded telemetry has explicit remote-enabled plus remote-write-verified evidence.
+- Harden ranked release path: use Deno check if available, then remote Edge deploy/apply only when explicitly requested.
+- Harden ad/gameplay telemetry release path: remote migration apply/Edge deploy only when explicitly requested, then set verified flags only after successful remote writes.
+- Launch public leaderboard rows only after remote identity-bound accepted runs exist and `VITE_RANKED_EDGE_REMOTE_ENABLED` plus `PUBLIC_LEADERBOARD_ENABLED` / `VITE_PUBLIC_LEADERBOARD_ENABLED` are intentionally enabled.
+- Continue UX/content polish: final boss bitmap/VFX replacement, boss HUD text density, and real-device mode QA.
+- Keep real-device QA focused on Lava core readability, Ice split pressure, Dark visibility, phase-action burst readability, and blocked-hit feedback.
 
 Reason:
-- The implementation queue is now mostly in place; the highest risk is touch feel, readability, and platform release assumptions.
+- Boss practice access is now fast enough; next product risk is misleading revive/ranking claims before the platform and backend are truly live.

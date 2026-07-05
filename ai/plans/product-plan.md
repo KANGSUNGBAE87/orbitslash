@@ -1,7 +1,7 @@
 ---
 version: 1.0
 status: approved
-updated: 2026-06-28
+updated: 2026-07-05
 canonical: true
 ---
 
@@ -13,6 +13,20 @@ canonical: true
 ## Change Log
 
 - 2026-06-28 (claude): Owner 기획문 v1.0 최초 등록. 원문 그대로 보존.
+- 2026-07-05 (codex): 현재 출시 타깃 addendum 추가. 원문 플랫폼 문구는
+  보존하되, 실행 기준은 `src/platform/ReleaseTarget.ts`의 Google
+  Play-first release prep + Apps in Toss compatibility로 정렬.
+
+## Current Release Target Addendum — 2026-07-05
+
+본 기획문 원문은 Apps in Toss WebView 게임으로 시작했지만, 현재 실행 기준은
+`src/platform/ReleaseTarget.ts`를 따른다.
+
+- Current implementation target: local web playable.
+- First public release prep target: Google Play-first.
+- Compatibility requirement: Apps in Toss-compatible.
+- Publishing rule: actual publishing/deployment still requires a separate Owner
+  command.
 
 ---
 
@@ -211,6 +225,7 @@ Metal Asteroid, Shield Rock, 일부 Planet Fragment, 보스 약점, 고급 운�
 | Solar Lance | 지구 관통 긴 직선 | 방향성 관통 레이저 | 12초 | 80 |
 | Gravity Slow | 지구 주변 돼지꼬리/홀드 | 2.5초 슬로우 | 25초 | 100 |
 | Delta Shield | 지구 주변 삼각형 | 3초 방어막 | 30초 | 100 |
+| Nova Pulse | 지구 근처에서 바깥으로 튕김 | 근거리 적 밀쳐내기+피해 | 18초 | 64 |
 
 ---
 
@@ -503,10 +518,14 @@ Solar Lance: 손 뗀 순간 직선 경로만 판정. 연출 중 지나가면 안
 | Master | 30~40초 |
 
 ### 19.4 보스 목록
-1. **Ringed Destroyer** (토성형): 1P 고리 베기 → 2P 본체 약점. 고리 조각 발사. 방향+타이밍.
-2. **Lava Titan** (불): 1P 화염 코어 3개 → 2P 화염 운석 대량. 화염 잔상. 우선순위 판단.
-3. **Ice Colossus** (얼음): 1P 얼음 방어막 → 2P 조각 분열. 화면 얼림. 후속 처리.
-4. **Black Core** (블랙홀): 1P 직접 베면 안 됨 → 2P 코어 열릴 때만. 운석 빨아들여 가속. 기다림+타이밍.
+Current implementation SSOT: **Eclipse Core** is the first survival/default boss.
+**Ringed Destroyer** is the Boss Rush opener. **Black Core** is a deprecated
+concept kept only as pattern inspiration, not an active release roster boss.
+
+1. **Eclipse Core** (초식/월식 코어): 첫 생존 보스. 약점 노출, 경고, 파편 발사로 보스 체감 입문.
+2. **Ringed Destroyer** (토성형): Boss Rush 첫 보스. 1P 고리 베기 → 2P 본체 약점. 고리 조각 발사.
+3. **Lava Titan** (불): 1P 화염 코어 3개 → 2P 화염 운석 대량. 화염 잔상. 우선순위 판단.
+4. **Ice Colossus** (얼음): 1P 얼음 방어막 → 2P 조각 분열. 화면 얼림. 후속 처리.
 5. **Dark Planet** (암흑): 1P 화면 어둡게 → 2P 가짜 약점. 암흑 운석. 집중력+기억력.
 
 ### 19.5 최종보스 철학
@@ -535,7 +554,7 @@ Solar Lance: 손 뗀 순간 직선 경로만 판정. 연출 중 지나가면 안
 | 8 | Final Orbit | 종합 보스전 |
 
 ### 20.2 Free Defense
-부담 없이 연습. 랭킹 미반영, 광고 부활 가능, 난이도 선택. 무료 하루 5판, 광고 +1판/부활.
+부담 없이 연습. 랭킹 미반영, 난이도 선택. 무료 하루 5판. 광고 +1판/부활은 계획된 기능이지만 보상형 광고 텔레메트리와 플랫폼 어댑터 준비 전까지 잠금.
 
 ### 20.3 Ranked League
 핵심 경쟁. 난이도별 랭킹, 생존 시간 최우선. 광고 부활 금지, 재도전권 허용.
@@ -582,7 +601,8 @@ seed = hash(date + difficulty + seasonId)
 
 ### 22.1 허용
 Free Defense 부활 / Story 재도전 / Ranked 재도전권 / Boss Rush 재도전권 /
-보상 2배 / 스킨·이펙트 광고 해금(추후).
+보상 2배 / 스킨·이펙트 광고 해금(추후). 단, Free Defense 부활은 보상형 광고
+텔레메트리와 플랫폼 어댑터 준비 전까지 잠금 상태로 유지.
 
 ### 22.2 금지
 랭킹전 도중 부활 / 랭킹 점수 이어가기 / 시간 연장 광고 / 성능 강화 아이템.
@@ -645,7 +665,7 @@ Gravity Slow→Last Save 증가율, 보스별 사망률, 광고 재도전 전환
 
 **포함(필수)**: 게임명, 중앙 지구, 소용돌이 궤도, 손가락 슬래시, Earth Energy,
 Last Save, 콤보, 방향 베기, 인공위성, 에너지 캡슐, 구조대, EMP Mine, 운석/행성 타입
-다양화, 스킬 4종, 보스 게이지, 보스 5종, Story Stage, Free Defense, Ranked League,
+다양화, 스킬 5종, 보스 게이지, 보스 5종, Story Stage, Free Defense, Ranked League,
 랭킹 서버, Remote Config.
 **포함**: Boss Rush, 60s Blitz, Daily/Event Challenge, 광고 재도전권.
 **출시 후 미룸**: 무기 스킨, 지구 스킨, 칭호, 시즌 패스, 꾸미기 상점.
