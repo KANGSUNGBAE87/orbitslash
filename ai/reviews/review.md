@@ -1,7 +1,7 @@
 ---
-version: 0.7
+version: 0.8
 status: active
-updated: 2026-07-05
+updated: 2026-07-06
 canonical: true
 ---
 
@@ -63,11 +63,24 @@ This is the canonical current QA/readiness backlog. It tracks deferred manual QA
 - 2026-07-05 (codex): Updated after platform telemetry context pass: platform adapters now expose runtime context, GameScene gameplay telemetry carries web/Apps in Toss/Google Play runtime metadata, Apps in Toss private/live/sandbox channel detection is covered, and Google Play telemetry is allowed without Toss runtime_channel.
 - 2026-07-05 (codex): Updated after read-only remote Supabase reverify: remote currently has only `orbitslash_runs` and `orbitslash_scores`, both RLS-on with no public policies or anon/authenticated grants; 2026-07-05 local tables/functions are not deployed remotely.
 - 2026-07-05 (codex): Updated after local gap closure: Boss Weak DEV QA now uses deterministic `blockedBody`, ranked Graviton pull has a GameScene-level replay guard, special-object hit/reward labels are type-specific, HUD tutorial/blocked panel geometry has local guards, stale implementation-plan wording was cleaned, and full local verification passed at 78 files / 494 tests.
+- 2026-07-06 (codex): Updated after release/deploy batch: commit `8821df6`
+  was pushed to `main` and deployed by GitHub Pages run `28746871714`, Orbit
+  Slash Supabase migrations/functions were applied to the shared project through
+  targeted SQL statements and Edge deploys, service-role grants were added for
+  server-only table writes, and remote smoke passed for anonymous ranked begin,
+  rewarded telemetry, and gameplay telemetry. Public leaderboard and
+  identity-bound ranked submit remain gated.
 
 ## Current State
 
 - Latest local gameplay batch includes 8-tier image assets, eight advanced enemy variants (`fire_meteor`, `ice_comet`, `crystal_meteor`, `shield_rock`, `electric_meteor`, `graviton_core`, `dark_meteor`, `armored_fragment`), advanced SVG enemy assets, sprite Earth core/shield, `hp=50` boss runtime, always-on Threat HUD, warning/remaining-hit HUD, five boss definitions with distinct Ring/Lava/Ice/Dark phase/objective/weak-point contracts, weak-point positional resolver, phase/zone-aware weak-point visual markers, weak-point-only blocked-hit feedback, dedicated blocked weak-point callout title/detail panel, separate active boss objective HUD line, Ringed Destroyer shard telegraph lanes, per-boss shard telegraph colors, phase-aware boss shard profiles, one-shot boss `phase_action` bursts, boss phase-driven normal wave pressure, Lava Titan core/heart weak-point-only body lock, Dark Planet weak-point-only false/true-core lock, themed boss attack enemies, Free Defense Boss Practice selectable boss targets, DEV `qaBoss` URL entry, live Story tutorial callouts, Boss Rush weak-point tutorial callouts, large 5-slot HUD, persistent Delta Shield HUD with boss knockback instead of boss instakill, 7-second base wave cadence, mode-specific wave overlays, content-profile enemy weight bias, 60s Blitz 10-second bands, thick bottom Earth energy bar, stronger danger/Last Save feedback duration/radius, live slash immediate kill rewards, skill-responsive periodic boss threat from kills/combo/Last Save/bossWeak hits, single-pointer input guard, visual-only enemy motion layers, moving friendly rescue/satellite special objects, hit-history-independent skill release checks with enabled-skill enforcement, five release skills including Nova Pulse, protect/avoid special objects, Story 8x4 stage plan with tutorial keys, selected-stage launch, and active content profiles, five Daily modifiers with active content profiles plus pass/fail evaluation, Free Defense difficulty/practice/daily-limit/ad-revive-locked contracts, Free Defense standard-limit locked UX with practice still startable, Ranked difficulty tabs, ranked KST weekly seed policy, ranked fresh-token retry policy, ranked submit outcome UI updates, verified-leaderboard locked boundary UI, gated public leaderboard row contract, Boss Rush local sequence/result/progression surfacing, 3x2 mode card layout, localized AppShell boot/loading/settings/records/results/collection/progress surfacing, root-fit safe-area support, mode-specific `ModeResult` metadata, Story/Daily progression storage, mode contracts, app shell, local progression storage, DEV-only QA recorder/progression isolation, local ranked server-boundary wiring, ranked semantic replay validation, ranked source/segment geometry validation, ranked damage/HP progression replay, ranked runtime spawn trace, ranked shield/armor absorbed-hit replay, rewarded-ad capability/telemetry stubs, local rewarded telemetry Edge/table draft, remote-enable rewarded telemetry gate, local gameplay telemetry Edge/table draft, gameplay telemetry CORS and ranked run identity binding, raw identity release-boundary guard, injected Apps in Toss / Google Play platform adapter shells, release-target SSOT with docs/package alignment tests, release-claim guard tests for user-facing copy and package metadata, Remote Config fetch/fallback gated by `VITE_REMOTE_CONFIG_ENABLED`, `preflight:release` generic plus Google Play/Apps in Toss target scans, and ranked boss-shard/identity/leaderboard/rejected-run guards in local validator plus Edge draft.
 - Local gap-closure addendum: `?qaPreset=blockedBody` now gives a deterministic blocked boss-body QA state, special-object hit/reward labels are type-specific, ranked Graviton pull has a GameScene-level replay guard, and HUD tutorial/blocked-panel geometry has local non-overlap guards.
+- Remote release/deploy addendum: GitHub Pages now serves commit `8821df6`; the
+  shared Supabase project has the five Orbit Slash tables with RLS enabled,
+  `orbitslash-ranked-run`, `orbitslash-rewarded-ad-telemetry`, and
+  `orbitslash-gameplay-telemetry` are `ACTIVE`, and remote smoke confirmed
+  anonymous ranked begin plus rewarded/gameplay telemetry writes. Public
+  leaderboard stays disabled until identity-bound verified scores are tested.
 - Automated verification passed for the latest local state:
   - `npm test -- --run`: 78 files / 494 tests passed on 2026-07-05 after blocked-body QA preset, ranked Graviton guard, special-object feedback labels, and HUD geometry guards.
   - Focused Boss Pattern Batch B regression: 5 files / 41 tests passed for boss definitions, boss runtime, telegraph metadata, GameScene boss integration, and ranked replay guard.
@@ -85,6 +98,15 @@ This is the canonical current QA/readiness backlog. It tracks deferred manual QA
   - Edge Function draft syntax/bundle checks for `orbitslash-ranked-run`, `orbitslash-rewarded-ad-telemetry`, and `orbitslash-gameplay-telemetry` with `npx esbuild ... --external:https://esm.sh/@supabase/supabase-js@2`: passed through `preflight:release`.
   - Focused ranked boundary check: 4 files / 27 tests passed for validator, run-session hit/kill trace copy, backend validation, and Edge adapter.
   - `deno check`: skipped by `preflight:release` because Deno CLI is not installed in current PATH.
+  - 2026-07-06 GitHub Pages deploy: pushed `8821df6` to `main`; GitHub Actions
+    run `28746871714` succeeded after rerunning a transient Pages deploy step.
+  - 2026-07-06 live Pages HTTP smoke:
+    `https://kangsungbae87.github.io/orbitslash/` returned `HTTP 200`.
+  - 2026-07-06 remote Supabase smoke: Orbit Slash migrations were applied with a
+    targeted statement runner, Edge Functions were deployed, service-role grants
+    were applied, leaderboard returned expected disabled `403`, anonymous ranked
+    begin returned `200`, rewarded telemetry returned `200`, and gameplay
+    telemetry returned `200`.
   - Graphify refreshed: 3232 nodes / 346877 edges after local gap closure and final blocked-body path update.
   - cmm refreshed via CLI after MCP transport failure: `Users-kangsungbae-Documents-orbitslash` ready with 3284 nodes / 6878 edges.
   - Local dev server visual smoke: `http://127.0.0.1:5191/` rendered current local app at 390x844, launched gameplay from home, and reported no app console errors before server shutdown.

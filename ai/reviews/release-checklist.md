@@ -1,7 +1,7 @@
 ---
-version: 0.6
+version: 0.7
 status: draft
-updated: 2026-07-05
+updated: 2026-07-06
 canonical: true
 ---
 
@@ -58,16 +58,29 @@ canonical: true
   currently has only `orbitslash_runs` and `orbitslash_scores`; both have RLS on,
   public policy count 0, and no anon/authenticated table grants. The 2026-07-05
   local migrations and Orbit Slash Edge Functions are not deployed remotely.
+- 2026-07-06 (codex): Published commit `8821df6` to GitHub Pages, applied
+  Orbit Slash Supabase migrations through targeted `db query` statements because
+  the shared Supabase project has cross-app migration history, deployed
+  `orbitslash-ranked-run`, `orbitslash-rewarded-ad-telemetry`, and
+  `orbitslash-gameplay-telemetry`, added service-role table grants, and verified
+  remote ranked begin plus rewarded/gameplay telemetry writes. Public leaderboard
+  remains intentionally disabled and identity-bound ranked submission QA remains
+  pending.
 
 ## Release Target Status
 
-- Current implementation target: local web playable build.
+- Current implementation target: GitHub Pages playable build plus remote backend
+  smoke-ready release-candidate backend.
 - Release target SSOT: `src/platform/ReleaseTarget.ts` records Google Play-first
   release prep, Apps in Toss compatibility, and the rule that actual publishing
   needs a separate Owner command.
-- Public ranking: locally wired with semantic replay, source/segment geometry validation, and damage/HP progression replay. It is not release-ready until remote Edge deploy and user identity binding are accepted.
+- Public ranking: remote `orbitslash-ranked-run` is deployed and anonymous
+  ranked begin smoke passes, but public leaderboard is still disabled and
+  identity-bound ranked submit must be verified before enabling public ranking.
 - Store release: not ready.
-- GitHub deployment: previous gameplay batch was deployed and smoked historically; the current dirty worktree has not been redeployed.
+- GitHub deployment: commit `8821df6` deployed successfully through GitHub
+  Actions run `28746871714`; live root returned `HTTP 200` with last-modified
+  `Sun, 05 Jul 2026 16:17:32 GMT`.
 - DEV-only QA screen: `Touch/HUD`, `Boss Weak`, `Special`, `Blitz` launchers with local PASS/PEND markers.
 - DEV-only QA presets: `?qaPreset=directional`, `?qaPreset=lastSave`, `?qaPreset=dense`, `?qaPreset=boss`, `?qaPreset=blockedBody`, `?qaPreset=special`.
 - Release-boundary preflight: local script passed on 2026-07-05 after
@@ -119,7 +132,7 @@ Current Google Play draft positions:
 
 - [x] Ranking strategy selected: hybrid with Supabase verified ranking primary and Apps in Toss leaderboard bridge-ready.
 - [x] Keep dormant Supabase schema/RLS/service-role separation contract in local SQL and historical notes.
-- [x] Reverify current remote dormant Supabase schema/RLS state before release evidence use: read-only check found only `orbitslash_runs` and `orbitslash_scores` remotely; 2026-07-05 telemetry/rejection tables are not applied.
+- [x] Reverify current remote Supabase schema/RLS state before release evidence use: 2026-07-06 check found `orbitslash_runs`, `orbitslash_scores`, `orbitslash_telemetry_events`, `orbitslash_rewarded_ad_events`, and `orbitslash_gameplay_events`; all have RLS on.
 - [x] Implement local server/Edge `beginRankedRun` draft with server-issued token, seed, config version, expiry, and one ranked start response.
 - [x] Implement local server/Edge `submitRankedRun` draft with token lookup, expiry, one-use guard, seed/difficulty/config matching, and sane score/count checks.
 - [x] Add client Edge adapter path using only `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`; local fallback remains non-ranked.
@@ -136,15 +149,17 @@ Current Google Play draft positions:
 - [x] Add local Remote Config fetch/fallback gated behind explicit remote-config env flags.
 - [x] Add admin-only rejected ranked-run diagnostics Edge draft plus local rejection-reason migration.
 - [x] Add gameplay telemetry migration and dedicated Edge Function draft locally, with CORS, remote-enable gate, sensitive payload rejection, ranked run identity binding, and client `BackendAdapter.trackEvent` wiring.
-- [ ] Apply the 2026-07-05 ranking validation migration remotely.
-- [ ] Deploy `orbitslash-ranked-run` Edge Function remotely.
-- [ ] Apply the 2026-07-05 ad telemetry migration remotely.
-- [ ] Deploy `orbitslash-rewarded-ad-telemetry` Edge Function remotely.
-- [ ] Apply the 2026-07-05 gameplay telemetry migration remotely.
-- [ ] Deploy `orbitslash-gameplay-telemetry` Edge Function remotely.
+- [x] Apply the 2026-07-05 ranking validation migration remotely.
+- [x] Deploy `orbitslash-ranked-run` Edge Function remotely.
+- [x] Apply the 2026-07-05 ad telemetry migration remotely.
+- [x] Deploy `orbitslash-rewarded-ad-telemetry` Edge Function remotely.
+- [x] Apply the 2026-07-05 gameplay telemetry migration remotely.
+- [x] Deploy `orbitslash-gameplay-telemetry` Edge Function remotely.
+- [x] Add/apply `service_role` grants for Orbit Slash Edge Function table writes.
+- [x] Verify remote anonymous ranked begin smoke, rewarded telemetry write, and gameplay telemetry write.
 - [ ] Verify remote ranked runs/scores bind to internal `core_user_id` before public leaderboard launch and before enabling `VITE_RANKED_EDGE_REMOTE_ENABLED=true`.
 - [x] Verify local SQL/Edge source keeps RLS and anon/service-role separation.
-- [x] Reverify current remote anon/service-role separation before release evidence use: read-only check found RLS enabled, 0 public policies, and no anon/authenticated grants on existing Orbit Slash remote tables.
+- [x] Reverify current remote anon/service-role separation before release evidence use: remote tables have RLS enabled; public client writes stay routed through Edge Functions, with `service_role` grants added only for server-side function access.
 - [x] Keep service-role operations server-only in the local Edge draft; client code only calls the Edge Function with public anon auth.
 
 ## QA Carryover
@@ -163,6 +178,16 @@ Latest local verification:
 - Release-claim guard: i18n copy and `package.json` metadata reject misleading global/online ranking, cross-device sync, live ad/IAP, and store-ready claims while remote ranking/ad/IAP remain gated.
 - Focused ranked boundary check: 4 files / 27 tests passed for validator, run-session hit/kill trace copy, backend validation, and Edge adapter.
 - `deno check`: skipped by `preflight:release` because Deno CLI is not installed in current PATH.
+- GitHub Pages deploy: pushed `8821df6` to `main`; GitHub Actions run
+  `28746871714` succeeded after rerunning a transient Pages deploy failure.
+- Live GitHub Pages smoke: `https://kangsungbae87.github.io/orbitslash/`
+  returned `HTTP 200`.
+- Remote Supabase schema apply: targeted `supabase db query` statement runner
+  applied Orbit Slash migrations because shared project migration history blocks
+  repo-local `supabase db push`.
+- Remote Supabase smoke: `orbitslash-ranked-run` leaderboard returns expected
+  disabled `403`, anonymous ranked begin returns `200`, and rewarded/gameplay
+  telemetry Edge writes return `200`.
 - Graphify refreshed: 3232 nodes / 346877 edges after local gap closure and final blocked-body path update.
 - cmm refreshed via CLI after MCP transport failure: `Users-kangsungbae-Documents-orbitslash` ready with 3284 nodes / 6878 edges.
 - Production bundle string check: no `qaMode` / `qaPreset` / `qaGauge` strings found in `dist`.
