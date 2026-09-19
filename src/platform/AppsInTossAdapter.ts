@@ -8,6 +8,7 @@ import type {
   PurchaseResult,
   RewardedAdCapability,
 } from "./PlatformAdapter";
+import type { AppsInTossBridgeContract } from "./apps-in-toss/AppsInTossBridge";
 
 export interface AppsInTossRuntimeHints {
   href?: string;
@@ -19,17 +20,7 @@ export interface AppsInTossRuntimeHints {
   runtimeChannel?: PlatformRuntimeChannel;
 }
 
-export interface AppsInTossBridge {
-  login?: () => Promise<{ internalUserId: string }>;
-  runtimeHints?: () => AppsInTossRuntimeHints;
-  rewardedAdCapability?: () => Promise<RewardedAdCapability>;
-  showRewardedAd?: () => Promise<AdResult>;
-  purchase?: (productId: string) => Promise<PurchaseResult>;
-  storageGet?: (key: string) => Promise<string | null>;
-  storageSet?: (key: string, value: string) => Promise<void>;
-  haptic?: (kind: "light" | "medium" | "heavy") => void;
-  trackAnalyticsEvent?: (event: PlatformAnalyticsEvent) => Promise<void>;
-}
+export type AppsInTossBridge = AppsInTossBridgeContract;
 
 export class AppsInTossAdapter implements IPlatformAdapter {
   private readonly mem = new Map<string, string>();
@@ -42,6 +33,10 @@ export class AppsInTossAdapter implements IPlatformAdapter {
       userId: result?.internalUserId ?? "apps-in-toss-anonymous",
       provider: "apps_in_toss",
     };
+  }
+
+  async getVerifiedSessionAccessToken(): Promise<string | null> {
+    return this.bridge.getVerifiedSessionAccessToken?.() ?? null;
   }
 
   telemetryContext(): PlatformTelemetryContext {
@@ -92,6 +87,14 @@ export class AppsInTossAdapter implements IPlatformAdapter {
 
   haptic(kind: "light" | "medium" | "heavy"): void {
     this.bridge.haptic?.(kind);
+  }
+
+  async safeAreaInsets(): Promise<import("./PlatformAdapter").SafeAreaInsets> {
+    return (await this.bridge.safeAreaInsets?.()) ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  }
+
+  async subscribeLifecycle(listener: (event: "background" | "foreground") => void): Promise<() => Promise<void>> {
+    return (await this.bridge.subscribeLifecycle?.(listener)) ?? (async () => undefined);
   }
 
   async trackAnalyticsEvent(event: PlatformAnalyticsEvent): Promise<void> {

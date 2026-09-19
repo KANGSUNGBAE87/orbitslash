@@ -1,7 +1,7 @@
 ---
-version: 0.2
+version: 0.5
 status: active
-updated: 2026-07-05
+updated: 2026-09-19
 canonical: true
 ---
 
@@ -12,6 +12,16 @@ release-product plan to the current code state. Use it before choosing the next
 implementation task so work stays aligned with the six-mode product goal.
 
 ## Change Log
+
+- 2026-09-19 (codex): 0~1단계 cleanup 완료. 기준선 백업, 공유 경계/취소/검사 복구,
+  Node 24/Deno 및 CI preflight, Edge 타입 검사 정상화. 136 files / 969 tests 통과.
+
+- 2026-09-19 (codex): Owner 방향을 로컬 구현 준비로 변경. 아래 현재 상태/큐가 우선하며,
+  Phase 0–8의 오래된 체크는 역사적 작업 기록이다. 출시/설치를 로컬 작업의 선행 조건에서 제외.
+
+- 2026-07-11 (codex): Added the current product-completion 1~5 queue and linked
+  the detailed execution plan. Corrected Phase 7 wording so bridge interfaces
+  are not reported as completed Google Play/Apps in Toss runtime integrations.
 
 - 2026-07-01 (codex): Created after three subagent reviews of the original
   product plan, implementation plan, current code state, QA backlog, and release
@@ -172,18 +182,24 @@ implementation task so work stays aligned with the six-mode product goal.
 - Evidence: `ai/session-logs/`
   - Dated implementation, QA, and handoff records.
 
-## Current Product State
+## Current Product State — 2026-09-19
 
-| Area | Status | Notes |
+Current scope: **local implementation preparation; no release execution**.
+The current queue below and `implementation-plan.md` §0 supersede historical queue wording.
+
+| Area | Status | Remaining |
 |---|---|---|
-| Core combat loop | Partial complete | Single PixiJS play scene works: orbiting enemies, slash hits, Earth Energy, game over, score. |
-| Judgment / touch feel | Partial complete | Live contact hits, re-entry hits, combo timeout, directional cut, Last Save, Solar Lance/Gravity Slow release fix exist; real-device QA remains. |
-| Skills | Complete core / needs device QA | Solar Lance, Orbital Cut, Gravity Slow, Delta Shield, and Nova Pulse are release skills. Delta Shield exposes persistent HUD state. |
-| Boss | Partial complete | `BossEncounterRuntime`, five boss definitions, Boss Rush sequence, phase metadata, weak-point positional resolver, weak-point overlay, weak-point-only feedback, Ringed Destroyer shard telegraph lanes, phase-action bursts, and phase-driven normal wave pressure exist. Full authored attack/VFX patterns still need tuning. |
-| Assets / motion | Partial complete | Earth/enemy/boss prototype assets, all-enemy app-shell preload, enemy liveliness, and moving rescue/satellite special objects exist; final artist-supplied asset replacement and real-device readability still need QA. |
-| Modes | Partial complete | Six `ModeId` values, mode select, mode rules, localized AppShell mode/result/records/collection surfacing from stored boss/special/title progress, Boss Rush sequence, 60s Blitz bands, Story 8x4 stage contracts with in-game tutorial callouts, Daily modifier presets, active Story/Daily content profiles, and Boss Practice boss selection exist. Full authored late-stage wave/boss tuning remains future work. |
-| Ranking/backend | Scaffold / safely blocked | Run/session/ranking boundaries, local replay validator, ranked spawn trace, damage history, absorbed-hit trace, weekly seed policy, boss-shard replay guard, Edge identity guard, and locked leaderboard boundary UI exist. Public ranked still requires remote Edge deployment/check and identity-bound accepted runs. |
-| Platform release | Scaffold | Adapter boundaries and release scan exist; Apps in Toss / Google Play implementation and official gate checks remain. |
+| Combat / skills / bosses | Local implementation + automated tests | Actual touch feel, readability, balance |
+| Six modes / Guided Story | Local game paths implemented | User feedback and full mode walkthrough |
+| Home / results / Collection / settings | Local implementation; ko/en, BGM and pause/resume wired | Selected UX fixes after local app review |
+| Progress / retention | Local save, medals, unlocks, weekly claim implemented | Real account/cloud integration |
+| Cloud / product telemetry / entitlements / friends | Local contracts, Edge/SQL drafts | Native/auth/UI gaps and remote deployment remain |
+| Ranked | Local practice + shared validation contracts | boss_shard server replay mismatch; public mode deferred |
+| Sharing / code boundary | Adapter split and scanner repair complete; actual-source regression passed | Native/Toss device sharing verification |
+| Platform / release | Host shells + Node 24/Deno/CI local checks ready; release deferred | Native services, Android toolchain, real device/store proof |
+
+Historical Phase 0–8 entries below are not fresh verification claims. For current evidence see
+`ai/reviews/review.md` and the 2026-09-19 session log.
 
 ## Non-Negotiable Rules
 
@@ -569,13 +585,21 @@ Checklist:
 - [x] Confirm final release order: Google Play-first release prep, then Apps in
   Toss compatibility/release path; actual publishing still requires a separate
   Owner release command.
-- [x] Implement platform adapters as needed.
-  - [x] Login.
-  - [x] Ads.
-  - [x] IAP.
-  - [x] Haptics.
-  - [x] Storage.
-  - [x] Analytics.
+- [x] Define platform adapter interfaces and injected bridge shells.
+- [ ] Implement and verify Google Play runtime bridge.
+  - [ ] Credential/login.
+  - [ ] AdMob.
+  - [ ] Google Play Billing.
+  - [ ] Haptics.
+  - [ ] Persistent storage.
+  - [ ] Analytics.
+- [ ] Implement and verify Apps in Toss runtime bridge.
+  - [ ] Toss login.
+  - [ ] Apps in Toss ads.
+  - [ ] Apps in Toss IAP.
+  - [ ] Haptics.
+  - [ ] Persistent storage.
+  - [ ] Analytics and `runtime_channel`.
 - [x] Content rating prep.
 - [x] Data safety / privacy disclosure prep.
 - [ ] Safe-area and WebView QA.
@@ -615,6 +639,24 @@ Checklist:
 - [x] Google Play gate reviewed.
 - [x] Release checklist updated with dates and evidence.
 
+## Current Local Implementation Queue — 2026-09-19
+
+Details and file/test scope: `ai/plans/implementation-plan.md` §0.
+
+- [x] Reconcile existing implementation, unconnected features, and verification gaps in canonical docs.
+- [x] Replace release-first work order with local implementation preparation.
+- [ ] A: inspect the local app with Owner feedback; record concrete reproductions and priorities.
+- [x] B: preserve baseline; split sharing SDK; repair scanner; run real-source regression, Edge type checks and local preflight.
+- [x] Prepare Node 24/Deno and wire preflight into CI; GitHub run itself remains unverified until a future push.
+- [ ] C: implement one selected gameplay/UI feedback slice; extract only touched responsibilities.
+- [ ] D: align local ranked boss-shard contracts and prepare unconnected feature boundaries.
+- [ ] Later: real identity/cloud/native services and remote verification, when requested.
+- [ ] Later: Android JDK/SDK, store packaging and publishing, when requested.
+
+Already implemented local slices: progression/reducer, mode/skill unlock, home/result flow,
+Guided Story, audio/settings, grouped assets, pause/lifecycle, medals/Collection/Daily/weekly.
+These are not to be reimplemented from the July task checklist.
+
 ## Completed Initial Implementation Queue
 
 These were the original immediate prerequisites. They are kept here as evidence
@@ -645,7 +687,7 @@ that the early queue is closed, not as the current next-work list.
 - This file is the roadmap checklist; it must point to evidence, not replace
   dated session logs.
 
-## Subagent Review Summary
+## Historical July Review Summary
 
 - Product roadmap review:
   - Current state is a six-mode local playable product shell on top of the
@@ -665,8 +707,7 @@ that the early queue is closed, not as the current next-work list.
 - Document audit:
   - `product-plan.md` is product scope SSOT.
   - `review.md` is closest to current QA/readiness SSOT.
-  - `implementation-plan.md` is Phase 1 architecture reference, not full
-    release roadmap.
+  - Current `implementation-plan.md` §0 supersedes this historical summary; Phase 1 is Appendix A.
   - `release-checklist.md` is current for local checks but cannot be used as
     remote/store release evidence until the unchecked remote and device gates
     are closed.

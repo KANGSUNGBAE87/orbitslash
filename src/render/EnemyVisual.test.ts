@@ -43,10 +43,10 @@ const shippedEnemyAssets = new Set([
   "./assets/enemies/dark-meteor.svg",
   "./assets/enemies/armored-fragment.svg",
   "./assets/enemies/eclipse-core.png",
-  "./assets/enemies/ringed-destroyer.svg",
-  "./assets/enemies/lava-titan.svg",
-  "./assets/enemies/ice-colossus.svg",
-  "./assets/enemies/dark-planet.svg",
+  "./assets/enemies/ringed-destroyer.png",
+  "./assets/enemies/lava-titan.png",
+  "./assets/enemies/ice-colossus.png",
+  "./assets/enemies/dark-planet.png",
 ]);
 
 describe("enemyVisualStyle", () => {

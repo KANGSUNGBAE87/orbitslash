@@ -109,6 +109,19 @@ export class BossEncounterRuntime implements IBossSystem {
     return [{ enemyType, spawnAtMs: this.nextBossAtMs }];
   }
 
+  /**
+   * Advances an intentionally suppressed spawn window without activating a boss.
+   * Used by scripted tutorials so completion cannot release an overdue boss.
+   */
+  deferUntil(elapsedMs: number): void {
+    this.elapsedMs = Math.max(this.elapsedMs, elapsedMs);
+    if (!this.config.enabled || this.completed || this.activeBossType || elapsedMs < this.nextBossAtMs) return;
+    const delayMs = this.sequenceMode()
+      ? Math.max(1, this.config.firstBossDelayMs ?? DEFAULT_FIRST_BOSS_DELAY_MS)
+      : Math.max(1, this.config.bossEveryMs);
+    this.nextBossAtMs = elapsedMs + delayMs;
+  }
+
   recordBossSpawned(enemyType: string, elapsedMs = this.elapsedMs): void {
     this.activeBossType = enemyType;
     this.elapsedMs = Math.max(this.elapsedMs, elapsedMs);

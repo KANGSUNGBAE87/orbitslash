@@ -125,6 +125,7 @@ export interface ScoringConfig {
   comboMultiplier: ComboTier[];
   comboGainPerSlashCap: number | null;
   comboChainTimeoutMs?: number;
+  combatGaugeGainMultiplier?: number;
   multiCutBonus: { double: number; triple: number; mega: number; orbital_master: number };
   gaugeGain: Record<string, number>;
 }

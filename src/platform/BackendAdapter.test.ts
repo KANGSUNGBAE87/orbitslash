@@ -11,6 +11,7 @@ import { createRunSummary } from "../game/RankingSystem";
 import { generateRankedReplaySpawns } from "../game/RankedReplayValidator";
 import enemiesJson from "../data/enemies.json";
 import type { EnemyTable, SpawnSpec } from "../game/types";
+import { RANKED_CORE_RULES_HASH, RANKED_CORE_SCHEMA_VERSION } from "../../shared/ranked-core";
 
 const enemies = enemiesJson as EnemyTable;
 
@@ -45,7 +46,13 @@ describe("LocalBackendAdapter", () => {
 
     const run = await backend.beginRankedRun("rookie");
 
-    expect(run).toMatchObject({ runToken: "local-1234", seed: 1234, difficulty: "rookie" });
+    expect(run).toMatchObject({
+      runToken: "local-1234",
+      seed: 1234,
+      difficulty: "rookie",
+      rulesHash: RANKED_CORE_RULES_HASH,
+      rulesVersion: RANKED_CORE_SCHEMA_VERSION,
+    });
     expect(JSON.stringify(run)).not.toMatch(/SERVICE_ROLE|SUPABASE_DB_PASSWORD|DEEPSEEK_API_KEY/);
   });
 
@@ -118,6 +125,22 @@ describe("LocalBackendAdapter", () => {
         difficulty: "rookie",
       }),
     ).resolves.toEqual({ accepted: false, reason: "telemetry_not_configured" });
+  });
+
+  it("fails closed for asynchronous friend challenge calls in local-only mode", async () => {
+    const backend = new LocalBackendAdapter(1234);
+    const contract = {
+      seed: 34199,
+      difficulty: "elite",
+      rulesHash: "rules-1",
+      rulesVersion: 4,
+      configVersion: "config-1",
+      expiresAt: "2026-08-01T00:00:00.000Z",
+    };
+
+    await expect(backend.createFriendChallenge(contract)).resolves.toEqual({ accepted: false, reason: "friend_challenge_not_configured" });
+    await expect(backend.listFriendChallenges()).resolves.toEqual({ available: false, challenges: [], reason: "friend_challenge_not_configured" });
+    await expect(backend.acceptFriendChallenge("opaque-token", "server-ranked-run")).resolves.toEqual({ accepted: false, reason: "friend_challenge_not_configured" });
   });
 
   it("creates a server-stub ranked start that is explicit but not public-submit ready", () => {

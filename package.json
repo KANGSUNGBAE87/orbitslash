@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Orbit Slash — Endless Orbital Slash Defense (local web playable; Google Play-first and Apps in Toss-compatible release prep)",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -11,13 +14,21 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
+    "check:google-play-shell": "node scripts/check-google-play-shell.mjs",
+    "check:apps-in-toss-shell": "node scripts/check-apps-in-toss-shell.mjs",
+    "check:edge": "esbuild supabase/functions/orbitslash-product-telemetry/index.ts --bundle --platform=browser --format=esm --external:https://esm.sh/@supabase/supabase-js@2 --outfile=/tmp/orbitslash-product-telemetry-edge.js && esbuild supabase/functions/orbitslash-progress/index.ts --bundle --platform=browser --format=esm --external:https://esm.sh/@supabase/supabase-js@2 --outfile=/tmp/orbitslash-progress-edge.js && esbuild supabase/functions/orbitslash-entitlements/index.ts --bundle --platform=browser --format=esm --external:https://esm.sh/@supabase/supabase-js@2 --outfile=/tmp/orbitslash-entitlements-edge.js && esbuild supabase/functions/orbitslash-friend-challenge/index.ts --bundle --platform=browser --format=esm --external:https://esm.sh/@supabase/supabase-js@2 --outfile=/tmp/orbitslash-friend-challenge-edge.js",
+    "check:assets": "node scripts/check-asset-budget.mjs",
     "preflight:release-boundary": "node scripts/check-release-boundary.mjs",
     "preflight:release": "node scripts/check-release-prep.mjs"
   },
   "dependencies": {
+    "@apps-in-toss/web-framework": "2.10.5",
+    "@capacitor/android": "8.4.1",
+    "@capacitor/core": "8.4.1",
     "pixi.js": "^8.6.6"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.4.1",
     "@vitest/coverage-v8": "^2.1.9",
     "typescript": "^5.7.3",
     "vite": "^6.0.7",

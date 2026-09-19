@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import boundaryScriptSource from "../../scripts/check-release-boundary.mjs?raw";
+import { spawnSync } from "node:child_process";
 import { scanMisleadingReleaseClaims, scanProductionBundleForDevQaTokens, scanReleaseBoundary, scanTargetSpecificBoundary } from "./ReleaseBoundary";
 
 describe("scanReleaseBoundary", () => {
@@ -40,6 +40,38 @@ describe("scanReleaseBoundary", () => {
       reason: "raw_identity_in_client_code",
       token: "userKey",
     });
+  });
+
+  it("allows Google SDK imports only inside the Google Play bridge boundary", () => {
+    const result = scanReleaseBoundary([
+      { path: "src/platform/google-play/GooglePlayBridge.ts", content: 'import { Capacitor } from "@capacitor/core";' },
+      { path: "src/platform/BadGoogleSdk.ts", content: 'import { Capacitor } from "@capacitor/core";' },
+    ]);
+
+    expect(result.ok).toBe(false);
+    expect(result.violations).toContainEqual({
+      path: "src/platform/BadGoogleSdk.ts",
+      reason: "platform_sdk_in_wrong_boundary",
+      token: "@capacitor/",
+    });
+    expect(result.violations).not.toContainEqual(expect.objectContaining({ path: "src/platform/google-play/GooglePlayBridge.ts" }));
+  });
+
+  it("allows Apps in Toss SDK imports only inside its dedicated boundary or adapter", () => {
+    const result = scanReleaseBoundary([
+      { path: "src/platform/AppsInTossAdapter.ts", content: 'import "@apps-in-toss/web-framework";' },
+      { path: "src/platform/apps-in-toss/AppsInTossBridge.ts", content: 'import "@apps-in-toss/web-framework";' },
+      { path: "src/platform/BadTossSdk.ts", content: 'import "@apps-in-toss/web-framework";' },
+    ]);
+
+    expect(result.ok).toBe(false);
+    expect(result.violations).toContainEqual({
+      path: "src/platform/BadTossSdk.ts",
+      reason: "platform_sdk_in_wrong_boundary",
+      token: "@apps-in-toss/",
+    });
+    expect(result.violations).not.toContainEqual(expect.objectContaining({ path: "src/platform/AppsInTossAdapter.ts" }));
+    expect(result.violations).not.toContainEqual(expect.objectContaining({ path: "src/platform/apps-in-toss/AppsInTossBridge.ts" }));
   });
 });
 
@@ -83,11 +115,47 @@ describe("scanTargetSpecificBoundary", () => {
           path: "src/platform/AppsInTossAdapter.ts",
           content: "window.close(); const scheme = 'intoss://app';",
         },
+        {
+          path: "src/platform/apps-in-toss/AppsInTossBridge.ts",
+          content: "const scheme = 'intoss://app';",
+        },
       ],
       "google_play",
     );
 
     expect(result.ok).toBe(true);
+  });
+
+  it("allows the Google Play bridge directory while scanning Apps in Toss", () => {
+    const result = scanTargetSpecificBoundary(
+      [
+        {
+          path: "src/platform/GooglePlayAdapter.ts",
+          content: "location.href = 'market://details?id=com.example';",
+        },
+        {
+          path: "src/platform/google-play/GooglePlayBridge.ts",
+          content: "location.href = 'market://details?id=com.example';",
+        },
+      ],
+      "apps_in_toss",
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects target-specific SDK behavior in generic platform paths", () => {
+    const googlePlayTarget = scanTargetSpecificBoundary(
+      [{ path: "src/platform/BadPlatform.ts", content: "const scheme = 'intoss://app';" }],
+      "google_play",
+    );
+    const appsInTossTarget = scanTargetSpecificBoundary(
+      [{ path: "src/platform/BadPlatform.ts", content: "location.href = 'market://details?id=com.example';" }],
+      "apps_in_toss",
+    );
+
+    expect(googlePlayTarget.ok).toBe(false);
+    expect(appsInTossTarget.ok).toBe(false);
   });
 
   it("keeps Google Play store-only references out of Apps in Toss target code", () => {
@@ -138,17 +206,16 @@ describe("scanMisleadingReleaseClaims", () => {
 });
 
 describe("release boundary script", () => {
-  it("scans i18n copy for misleading release claims", () => {
-    expect(boundaryScriptSource).toContain("misleading_release_claim");
-    expect(boundaryScriptSource).toContain("global");
-    expect(boundaryScriptSource).toContain("cross-device");
-    expect(boundaryScriptSource).toContain("ad revive live claim");
+  it.each([undefined, "google_play", "apps_in_toss"])("runs shared rules against the repository for %s", (target) => {
+    const args = ["scripts/check-release-boundary.mjs", ...(target ? [`--target=${target}`] : [])];
+    const result = spawnSync(process.execPath, args, { encoding: "utf8", env: { ...process.env, VITE_TARGET: undefined } });
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("release boundary ok");
   });
-
-  it("supports platform target-specific boundary scans", () => {
-    expect(boundaryScriptSource).toContain("--target=");
-    expect(boundaryScriptSource).toContain("google_play");
-    expect(boundaryScriptSource).toContain("apps_in_toss");
-    expect(boundaryScriptSource).toContain("target_specific_api_in_wrong_bundle");
+  it("rejects unsupported targets before scanning", () => {
+    const result = spawnSync(process.execPath, ["scripts/check-release-boundary.mjs", "--target=invalid"], { encoding: "utf8" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("unsupported_release_target");
   });
 });

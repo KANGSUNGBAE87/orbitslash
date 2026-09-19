@@ -24,6 +24,16 @@ describe("i18n parity", () => {
       "bossRush.tutorial.weakPoint",
       "boss.weakPointOnly",
       "boss.weakPointHint",
+      "skillTutorial.title",
+      "skillTutorial.summary",
+      "skillTutorial.novaPulse.opening",
+      "skillTutorial.novaPulse.feedback.cooldown",
+      "skillTutorial.novaPulse.feedback.gauge",
+      "skillTutorial.novaPulse.feedback.start_too_far",
+      "skillTutorial.novaPulse.feedback.endpoint_too_close",
+      "skillTutorial.novaPulse.feedback.too_short",
+      "skillTutorial.novaPulse.feedback.not_straight",
+      "skillTutorial.novaPulse.feedback.too_slow",
       ...Object.values(BOSS_DEFINITIONS).map((definition) => definition.labelKey),
       ...Object.values(BOSS_DEFINITIONS).flatMap((definition) => definition.phases.map((phase) => phase.objectiveKey)),
     ].filter((key): key is string => Boolean(key));
@@ -48,6 +58,9 @@ describe("i18n parity", () => {
       "boot.readying",
       "loading.title",
       "loading.progress",
+      "lifecyclePause.title",
+      "lifecyclePause.body",
+      "lifecyclePause.resume",
       "status.locked",
       "status.comingSoon",
       "settings.language",
@@ -77,6 +90,11 @@ describe("i18n parity", () => {
       "collection.title.blitzSurvivor",
       "collection.title.comboPilot",
       "result.bossKills",
+      "result.unlockCategory.boss",
+      "result.unlockCategory.bossCodex",
+      "result.unlockNova.instruction",
+      "result.unlockNova.meta",
+      "result.unlockNova.contrast",
       "result.defeated",
       "result.objective",
       "result.objective.cleared",
@@ -122,6 +140,15 @@ describe("i18n parity", () => {
       "special.rescue.empMine",
       "directional.wrongAngle",
       "story.chapterStageCount",
+      "home.primary.start",
+      "home.primary.startHint",
+      "home.primary.resume",
+      "home.primary.modeSelect",
+      "home.primary.modeSelectHint",
+      "story.guided.basic_slash",
+      "story.guided.last_save",
+      "story.guided.solar_lance",
+      "story.guided.reward",
       "unit.secondsSuffix",
     ];
 
@@ -129,5 +156,20 @@ describe("i18n parity", () => {
       expect(koDict[key], `ko ${key}`).toBeTruthy();
       expect(enDict[key], `en ${key}`).toBeTruthy();
     }
+  });
+
+  it("keeps lifecycle pause overlay copy localized in English", () => {
+    expect(enDict["lifecyclePause.title"]).toBe("Game Paused");
+    expect(enDict["lifecyclePause.body"]).toBe("The app was in the background.\nResume when you are ready.");
+    expect(enDict["lifecyclePause.resume"]).toBe("Resume");
+  });
+
+  it("keeps the featured Nova unlock guide equivalent in both locales", () => {
+    expect(koDict["result.unlockNova.instruction"]).toBe("지구 표면 가까이에서 시작해\n바깥쪽으로 빠르고 곧게 플릭");
+    expect(koDict["result.unlockNova.meta"]).toBe("게이지 {cost} · 쿨타임 {seconds}초");
+    expect(koDict["result.unlockNova.contrast"]).toBe("솔라 랜스는 지구를 가로지르는 긴 직선");
+    expect(enDict["result.unlockNova.instruction"]).toBe("Start close to Earth's surface,\nthen flick outward fast and straight");
+    expect(enDict["result.unlockNova.meta"]).toBe("Gauge {cost} · Cooldown {seconds}s");
+    expect(enDict["result.unlockNova.contrast"]).toBe("Solar Lance is a long line that crosses Earth");
   });
 });

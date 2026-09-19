@@ -33,20 +33,20 @@ export class ResultOverlay {
     dim.hitArea = { contains: () => true } as never;
 
     const panel = new Graphics();
-    panel.roundRect(BASE_WIDTH / 2 - 380, BASE_HEIGHT / 2 - 320, 760, 640, 28).fill({ color: 0x0c1730, alpha: 0.95 });
-    panel.roundRect(BASE_WIDTH / 2 - 380, BASE_HEIGHT / 2 - 320, 760, 640, 28).stroke({ width: 3, color: 0xff5a5a, alpha: 0.8 });
+    panel.roundRect(BASE_WIDTH / 2 - 410, BASE_HEIGHT / 2 - 360, 820, 720, 28).fill({ color: 0x0c1730, alpha: 0.95 });
+    panel.roundRect(BASE_WIDTH / 2 - 410, BASE_HEIGHT / 2 - 360, 820, 720, 28).stroke({ width: 3, color: 0xff5a5a, alpha: 0.8 });
 
-    this.title = new Text({ text: t("result.gameOver"), style: style({ fontSize: 72, fontWeight: "bold", fill: 0xff6b6b }) });
+    this.title = new Text({ text: t("result.gameOver"), style: style({ fontSize: 80, fontWeight: "bold", fill: 0xff6b6b }) });
     this.title.anchor.set(0.5);
-    this.title.position.set(BASE_WIDTH / 2, BASE_HEIGHT / 2 - 180);
+    this.title.position.set(BASE_WIDTH / 2, BASE_HEIGHT / 2 - 230);
 
-    this.body = new Text({ text: "", style: style({ fontSize: 44 }) });
-    this.body.anchor.set(0.5);
-    this.body.position.set(BASE_WIDTH / 2, BASE_HEIGHT / 2);
+    this.body = new Text({ text: "", style: style({ fontSize: 48, lineHeight: 56 }) });
+    this.body.anchor.set(0.5, 0);
+    this.body.position.set(BASE_WIDTH / 2, BASE_HEIGHT / 2 - 92);
 
-    this.hint = new Text({ text: t("result.restart"), style: style({ fontSize: 34, fill: 0xffc14d }) });
+    this.hint = new Text({ text: t("result.restart"), style: style({ fontSize: 40, fill: 0xffc14d }) });
     this.hint.anchor.set(0.5);
-    this.hint.position.set(BASE_WIDTH / 2, BASE_HEIGHT / 2 + 220);
+    this.hint.position.set(BASE_WIDTH / 2, BASE_HEIGHT / 2 + 245);
 
     this.container.addChild(dim, panel, this.title, this.body, this.hint);
     this.container.on("pointertap", () => {

@@ -1,13 +1,15 @@
-import { MODE_DEFINITIONS, STORY_STAGE_PLAN, type DailyModifierId, type ModeId, type ModeResult, type StoryStageContract } from "./ModeConfig";
+import { MODE_DEFINITIONS, type DailyModifierId, type ModeId, type ModeResult, type StoryStageContract } from "./ModeConfig";
 import type { IPlatformAdapter } from "../platform/PlatformAdapter";
-import {
-  applyUnlockRules,
-  defaultCollection,
-  defaultUnlocks,
-  type CollectionState,
-  type ProgressUnlocks,
-} from "./UnlockSystem";
+import { defaultCollection, defaultUnlocks, type CollectionState, type ProgressUnlocks } from "./UnlockSystem";
 import { getLocale, t } from "../i18n";
+import { claimWeeklyReward, reduceProgressAfterRun, type ProgressRecordOutcome, type WeeklyRewardClaimOutcome } from "./progression/ProgressReducer";
+import { migrateProgressSnapshot } from "./progression/ProgressMigration";
+import { CURRENT_PROGRESS_VERSION } from "./progression/ProgressSchema";
+import type { FirstSessionState } from "./onboarding/FirstSessionState";
+import type { StageMedal } from "./retention/StageMedalRules";
+import type { DailyRetentionState } from "./retention/DailyRetentionRules";
+import { RemoteConfig } from "./RemoteConfig";
+import type { RetentionConfig } from "./retention/RetentionConfig";
 
 export interface ModeProgressRecord {
   plays: number;
@@ -39,8 +41,14 @@ export interface FreeDefenseProgressState {
   dailyPlayCount: number;
 }
 
+export interface RetentionProgressState {
+  stageMedals: Record<string, StageMedal>;
+  daily: DailyRetentionState;
+  claimedWeeklyKeys: string[];
+}
+
 export interface ProgressSnapshot {
-  version: 2;
+  version: typeof CURRENT_PROGRESS_VERSION;
   profile: ProgressProfile;
   records: Partial<Record<ModeId, ModeProgressRecord>>;
   unlocks: ProgressUnlocks;
@@ -48,6 +56,8 @@ export interface ProgressSnapshot {
   story: StoryProgressState;
   daily: DailyProgressState;
   freeDefense: FreeDefenseProgressState;
+  onboarding: FirstSessionState;
+  retention: RetentionProgressState;
 }
 
 export interface ModeProgressSummary {
@@ -68,7 +78,11 @@ const STORAGE_KEY = "orbitslash.progress.v1";
 export const FREE_DEFENSE_DAILY_PLAY_LIMIT = 5;
 
 export class ProgressStore {
-  constructor(private readonly platform: Pick<IPlatformAdapter, "storageGet" | "storageSet">) {}
+  constructor(
+    private readonly platform: Pick<IPlatformAdapter, "storageGet" | "storageSet">,
+    private readonly clock: () => Date = () => new Date(),
+    private readonly retentionConfig: () => RetentionConfig = () => RemoteConfig.getRetention(),
+  ) {}
 
   async load(): Promise<ProgressSnapshot> {
     const raw = await this.platform.storageGet(STORAGE_KEY);
@@ -81,59 +95,34 @@ export class ProgressStore {
     }
   }
 
-  async recordResult(result: ModeResult): Promise<ProgressSnapshot> {
+  async recordResult(result: ModeResult): Promise<ProgressRecordOutcome> {
+    const outcome = reduceProgressAfterRun(await this.load(), result, this.clock(), this.retentionConfig());
+    await this.platform.storageSet(STORAGE_KEY, JSON.stringify(outcome.snapshot));
+    return outcome;
+  }
+
+  async saveOnboarding(onboarding: FirstSessionState): Promise<ProgressSnapshot> {
     const snapshot = await this.load();
-    const prev = snapshot.records[result.modeId] ?? {
-      plays: 0,
-      bestScore: 0,
-      bestSurvivalMs: 0,
-      bestCombo: 0,
-      bestKills: 0,
-      bestBossKills: 0,
-    };
-    const bossKills = result.bossKills ?? 0;
-    snapshot.records[result.modeId] = {
-      plays: prev.plays + 1,
-      bestScore: Math.max(prev.bestScore, result.score),
-      bestSurvivalMs: Math.max(prev.bestSurvivalMs, result.survivalMs),
-      bestCombo: Math.max(prev.bestCombo, result.maxCombo),
-      bestKills: Math.max(prev.bestKills, result.kills),
-      bestBossKills: Math.max(prev.bestBossKills, bossKills),
-    };
-    snapshot.profile.totalRuns += 1;
-    snapshot.profile.totalKills += result.kills;
-    snapshot.profile.totalBossKills += bossKills;
-    snapshot.profile.totalScore += result.score;
-    if (result.modeId === "freeDefense") {
-      recordFreeDefenseDailyPlay(snapshot.freeDefense);
-    }
-    if (result.modeId === "story" && result.objectiveOutcome === "cleared" && result.activeStoryStageId) {
-      addUnique(snapshot.story.clearedStageIds, result.activeStoryStageId);
-      const currentStageNumber = storyStageNumber(result.activeStoryStageId);
-      if (currentStageNumber != null) {
-        addUnique(snapshot.unlocks.storyStages, currentStageNumber);
-        if (currentStageNumber < STORY_STAGE_PLAN.length) addUnique(snapshot.unlocks.storyStages, currentStageNumber + 1);
-      }
-    }
-    if (result.modeId === "daily" && result.objectiveOutcome === "cleared") {
-      snapshot.daily.clearCount += 1;
-      if (result.activeDailyModifierId) addUnique(snapshot.daily.completedModifierIds, result.activeDailyModifierId);
-    }
-    applyUnlockRules({
-      result,
-      unlocks: snapshot.unlocks,
-      collection: snapshot.collection,
-      totalKills: snapshot.profile.totalKills,
-      totalBossKills: snapshot.profile.totalBossKills,
-    });
-    await this.platform.storageSet(STORAGE_KEY, JSON.stringify(snapshot));
-    return snapshot;
+    const next = { ...snapshot, onboarding };
+    await this.platform.storageSet(STORAGE_KEY, JSON.stringify(next));
+    return next;
+  }
+
+  async claimWeeklyReward(): Promise<WeeklyRewardClaimOutcome> {
+    const outcome = claimWeeklyReward(await this.load(), this.clock(), this.retentionConfig().weekly);
+    if (outcome.claimed) await this.platform.storageSet(STORAGE_KEY, JSON.stringify(outcome.snapshot));
+    return outcome;
+  }
+
+  /** Used only after a deterministic local/cloud merge has produced a full snapshot. */
+  async replace(snapshot: ProgressSnapshot): Promise<void> {
+    await this.platform.storageSet(STORAGE_KEY, JSON.stringify(normalizeSnapshot(snapshot)));
   }
 }
 
 function defaultProgressSnapshot(): ProgressSnapshot {
   return {
-    version: 2,
+    version: CURRENT_PROGRESS_VERSION,
     profile: {
       totalRuns: 0,
       totalKills: 0,
@@ -154,11 +143,18 @@ function defaultProgressSnapshot(): ProgressSnapshot {
       dailyPlayDate: null,
       dailyPlayCount: 0,
     },
+    onboarding: migrateProgressSnapshot({}).onboarding,
+    retention: {
+      stageMedals: {},
+      daily: { firstClearAwards: [], clearDayKeys: [] },
+      claimedWeeklyKeys: [],
+    },
   };
 }
 
 function normalizeSnapshot(parsed: Partial<ProgressSnapshot>): ProgressSnapshot {
   const base = defaultProgressSnapshot();
+  const migrated = migrateProgressSnapshot(parsed as Record<string, unknown>);
   const records: Partial<Record<ModeId, ModeProgressRecord>> = {};
   for (const [modeId, record] of Object.entries(parsed.records ?? {}) as Array<[ModeId, Partial<ModeProgressRecord>]>) {
     records[modeId] = {
@@ -171,7 +167,7 @@ function normalizeSnapshot(parsed: Partial<ProgressSnapshot>): ProgressSnapshot 
     };
   }
   return {
-    version: 2,
+    version: CURRENT_PROGRESS_VERSION,
     profile: { ...base.profile, ...(parsed.profile ?? {}) },
     records,
     unlocks: {
@@ -193,6 +189,8 @@ function normalizeSnapshot(parsed: Partial<ProgressSnapshot>): ProgressSnapshot 
       clearCount: parsed.daily?.clearCount ?? 0,
     },
     freeDefense: normalizeFreeDefenseProgress(parsed.freeDefense),
+    onboarding: migrated.onboarding,
+    retention: normalizeRetentionProgress(parsed.retention),
   };
 }
 
@@ -209,19 +207,25 @@ export function freeDefenseDateKey(now = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-function recordFreeDefenseDailyPlay(progress: FreeDefenseProgressState, now = new Date()): void {
-  const today = freeDefenseDateKey(now);
-  if (progress.dailyPlayDate !== today) {
-    progress.dailyPlayDate = today;
-    progress.dailyPlayCount = 0;
-  }
-  progress.dailyPlayCount += 1;
-}
-
 function normalizeFreeDefenseProgress(parsed: Partial<FreeDefenseProgressState> | undefined): FreeDefenseProgressState {
   return {
     dailyPlayDate: parsed?.dailyPlayDate ?? null,
     dailyPlayCount: parsed?.dailyPlayCount ?? 0,
+  };
+}
+
+function normalizeRetentionProgress(parsed: Partial<RetentionProgressState> | undefined): RetentionProgressState {
+  const medals: Record<string, StageMedal> = {};
+  for (const [stageId, medal] of Object.entries(parsed?.stageMedals ?? {})) {
+    if (medal === "bronze" || medal === "silver" || medal === "gold") medals[stageId] = medal;
+  }
+  return {
+    stageMedals: medals,
+    daily: {
+      firstClearAwards: mergeUnique([], parsed?.daily?.firstClearAwards),
+      clearDayKeys: mergeUnique([], parsed?.daily?.clearDayKeys),
+    },
+    claimedWeeklyKeys: mergeUnique([], parsed?.claimedWeeklyKeys),
   };
 }
 
@@ -274,14 +278,4 @@ function mergeUnique<T>(base: T[], extra: T[] | undefined): T[] {
     if (!out.includes(item)) out.push(item);
   }
   return out;
-}
-
-function addUnique<T>(items: T[], item: T): void {
-  if (!items.includes(item)) items.push(item);
-}
-
-function storyStageNumber(stageId: StoryStageContract["id"]): number | null {
-  const match = /^story-(\d+)$/.exec(stageId);
-  if (!match) return null;
-  return Number.parseInt(match[1]!, 10);
 }

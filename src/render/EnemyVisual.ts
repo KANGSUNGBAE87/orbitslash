@@ -33,10 +33,10 @@ const ASSETS: Record<string, string> = {
   dark_meteor: "./assets/enemies/dark-meteor.svg",
   armored_fragment: "./assets/enemies/armored-fragment.svg",
   eclipse_core: "./assets/enemies/eclipse-core.png",
-  ringed_destroyer: "./assets/enemies/ringed-destroyer.svg",
-  lava_titan: "./assets/enemies/lava-titan.svg",
-  ice_colossus: "./assets/enemies/ice-colossus.svg",
-  dark_planet: "./assets/enemies/dark-planet.svg",
+  ringed_destroyer: "./assets/enemies/ringed-destroyer.png",
+  lava_titan: "./assets/enemies/lava-titan.png",
+  ice_colossus: "./assets/enemies/ice-colossus.png",
+  dark_planet: "./assets/enemies/dark-planet.png",
 };
 
 const STYLES: Record<string, EnemyVisualStyle> = {
@@ -102,20 +102,48 @@ export function drawEnemyVisual(g: Graphics, en: EnemyState, requiredAngleRad?: 
   const r = en.radiusPx;
   g.clear();
 
+  const shadow = 0x020617;
+  const lightX = -r * 0.34;
+  const lightY = -r * 0.32;
+  const rimWidth = Math.max(4, r * (style.boss ? 0.08 : 0.06));
+  const crackWidth = Math.max(2, r * (style.boss ? 0.028 : 0.022));
+
   if (style.shape === "comet") {
-    g.ellipse(-r * 0.28, 0, r * 0.72, r * 0.38).fill({ color: style.rim, alpha: 0.28 });
+    g.ellipse(-r * 0.5, r * 0.12, r * 0.95, r * 0.42).fill({ color: style.rim, alpha: 0.22 });
+    g.ellipse(-r * 0.34, 0, r * 0.74, r * 0.36).fill({ color: style.sparkleColor, alpha: 0.13 });
     g.circle(0, 0, r).fill({ color: style.fill });
-    g.circle(0, 0, r).stroke({ width: 3, color: style.rim, alpha: 0.9 });
-    g.circle(-r * 0.34, -r * 0.28, r * 0.2).fill({ color: style.accent, alpha: 0.18 });
+    g.circle(r * 0.16, r * 0.2, r * 0.82).fill({ color: shadow, alpha: 0.2 });
+    g.circle(lightX, lightY, r * 0.33).fill({ color: style.accent, alpha: 0.18 });
+    g.circle(0, 0, r).stroke({ width: rimWidth, color: style.rim, alpha: 0.88 });
+    g.circle(0, 0, r * 0.82).stroke({ width: Math.max(2, rimWidth * 0.35), color: 0xffffff, alpha: 0.16 });
   } else if (style.shape === "asteroid") {
     g.circle(0, 0, r).fill({ color: style.fill });
-    g.circle(-r * 0.24, -r * 0.16, r * 0.23).fill({ color: 0x111827, alpha: 0.18 });
-    g.circle(r * 0.26, r * 0.22, r * 0.16).fill({ color: 0x111827, alpha: 0.14 });
-    g.circle(0, 0, r).stroke({ width: 4, color: style.rim, alpha: 0.9 });
+    g.circle(r * 0.18, r * 0.2, r * 0.86).fill({ color: shadow, alpha: style.boss ? 0.3 : 0.22 });
+    g.circle(lightX, lightY, r * 0.34).fill({ color: style.accent, alpha: style.boss ? 0.18 : 0.11 });
+    g.circle(-r * 0.24, -r * 0.16, r * 0.23).fill({ color: 0x111827, alpha: 0.2 });
+    g.circle(r * 0.26, r * 0.22, r * 0.16).fill({ color: 0x111827, alpha: 0.18 });
+    g.circle(0, 0, r).stroke({ width: rimWidth, color: style.rim, alpha: 0.9 });
+    if (style.boss) {
+      g.ellipse(0, r * 0.08, r * 1.22, r * 0.34).stroke({ width: Math.max(5, r * 0.035), color: style.sparkleColor, alpha: 0.36 });
+      g.circle(0, 0, r * 0.32).stroke({ width: Math.max(5, r * 0.035), color: style.sparkleColor, alpha: 0.34 });
+    }
   } else {
     g.circle(0, 0, r).fill({ color: style.fill });
-    g.circle(0, 0, r).stroke({ width: 3, color: style.rim, alpha: 0.85 });
-    g.circle(-r * 0.3, -r * 0.3, r * 0.25).fill({ color: style.accent, alpha: 0.08 });
+    g.circle(r * 0.2, r * 0.24, r * 0.82).fill({ color: shadow, alpha: 0.18 });
+    g.circle(lightX, lightY, r * 0.28).fill({ color: style.accent, alpha: 0.12 });
+    g.circle(0, 0, r).stroke({ width: rimWidth, color: style.rim, alpha: 0.85 });
+    g.circle(0, 0, r * 0.8).stroke({ width: Math.max(2, rimWidth * 0.3), color: 0xffffff, alpha: 0.12 });
+  }
+
+  for (let i = 0; i < (style.boss ? 7 : 4); i += 1) {
+    const angle = -Math.PI * 0.72 + i * (style.boss ? 0.43 : 0.62);
+    const inner = r * (0.14 + (i % 2) * 0.08);
+    const mid = r * (0.42 + (i % 3) * 0.08);
+    const outer = r * (0.72 + (i % 2) * 0.05);
+    g.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner)
+      .lineTo(Math.cos(angle + 0.24) * mid, Math.sin(angle + 0.24) * mid)
+      .lineTo(Math.cos(angle - 0.12) * outer, Math.sin(angle - 0.12) * outer)
+      .stroke({ width: crackWidth, color: style.crackColor, alpha: style.boss ? 0.42 : 0.28, cap: "round" });
   }
 
   drawDirectionalGuide(g, en, requiredAngleRad, false);

@@ -2,6 +2,7 @@ import type { BossHudState } from "./BossHudState";
 import type { RunConfig } from "./ModeConfig";
 import { activeStoryStageForConfig } from "./ModeObjectiveSystem";
 import { t } from "../i18n";
+import type { TutorialFlowState } from "./onboarding/TutorialFlow";
 
 export interface TutorialHudState {
   title: string;
@@ -9,7 +10,11 @@ export interface TutorialHudState {
   tone: "story" | "boss" | "warning";
 }
 
-export function buildTutorialHudState(config: RunConfig, boss?: BossHudState): TutorialHudState | undefined {
+export const SKILL_TUTORIAL_DURATION_MS = 12_000;
+
+export function buildTutorialHudState(config: RunConfig, boss?: BossHudState, elapsedMs = Infinity, guidedFlow?: TutorialFlowState): TutorialHudState | undefined {
+  const skillTutorial = buildSkillTutorialState(config, elapsedMs);
+
   if (config.modeId === "story") {
     const stage = activeStoryStageForConfig(config);
     if (!stage) {
@@ -19,14 +24,21 @@ export function buildTutorialHudState(config: RunConfig, boss?: BossHudState): T
         tone: "warning",
       };
     }
+    if (stage.id === "story-1" && guidedFlow) {
+      return {
+        title: `${t(stage.labelKey)} · ${t("story.tutorial.label")}`,
+        message: t(`story.guided.${guidedFlow.step}`),
+        tone: "story",
+      };
+    }
     return {
       title: `${t(stage.labelKey)} · ${t("story.tutorial.label")}`,
-      message: t(stage.tutorialKey),
+      message: skillTutorial ? `${t(stage.tutorialKey)}\n${skillTutorial.message}` : t(stage.tutorialKey),
       tone: "story",
     };
   }
 
-  if (config.modeId !== "bossRush") return undefined;
+  if (config.modeId !== "bossRush") return skillTutorial;
 
   if (boss?.active) {
     return {
@@ -46,7 +58,19 @@ export function buildTutorialHudState(config: RunConfig, boss?: BossHudState): T
 
   return {
     title: t("bossRush.tutorial.title"),
-    message: t("bossRush.tutorial.prepare"),
+    message: skillTutorial ? `${t("bossRush.tutorial.prepare")}\n${skillTutorial.message}` : t("bossRush.tutorial.prepare"),
     tone: "boss",
+  };
+}
+
+function buildSkillTutorialState(config: RunConfig, elapsedMs: number): TutorialHudState | undefined {
+  if (elapsedMs > SKILL_TUTORIAL_DURATION_MS) return undefined;
+  if (config.rules.enabledSkills.length === 0) return undefined;
+  return {
+    title: t("skillTutorial.title"),
+    message: config.rules.enabledSkills.includes("nova_pulse")
+      ? t("skillTutorial.novaPulse.opening")
+      : t("skillTutorial.summary"),
+    tone: "story",
   };
 }

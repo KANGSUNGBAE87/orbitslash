@@ -12,6 +12,8 @@ interface Particle {
 interface Burst {
   root: Container;
   ring: Graphics;
+  coreFlash: Graphics;
+  shockRings: Graphics[];
   particles: Particle[];
   age: number;
   lifeMs: number;
@@ -51,10 +53,24 @@ export class DestructionBurst {
     const root = new Container();
     root.position.set(x, y);
 
+    const coreFlash = new Graphics();
+    coreFlash.circle(0, 0, radius * 0.18).fill({ color: secondaryColor, alpha: isLastSave ? 0.76 : 0.58 });
+    coreFlash.circle(0, 0, radius * 0.34).stroke({ width: isLastSave ? 6 : 4, color, alpha: 0.45 });
+
     const ring = new Graphics();
     ring.circle(0, 0, radius * 0.35).stroke({ width: isLastSave ? 5 : 3, color, alpha: 0.8 });
     ring.circle(0, 0, radius * 0.18).stroke({ width: 2, color: secondaryColor, alpha: isLastSave ? 0.6 : 0.32 });
-    root.addChild(ring);
+
+    const shockRings = [0, 1, 2].map((i) => {
+      const shock = new Graphics();
+      shock.circle(0, 0, radius * (0.42 + i * 0.16)).stroke({
+        width: Math.max(2, radius * (isLastSave ? 0.04 : 0.028)),
+        color: i === 1 ? secondaryColor : color,
+        alpha: (isLastSave ? 0.28 : 0.2) - i * 0.045,
+      });
+      return shock;
+    });
+    root.addChild(coreFlash, ...shockRings, ring);
 
     const particles: Particle[] = [];
     for (let i = 0; i < particleCount; i++) {
@@ -63,9 +79,11 @@ export class DestructionBurst {
       const distance = radius * (isLastSave ? 1.55 : 1.2) * (0.72 + (i % 5) * 0.08);
       const sprite = new Graphics();
       if (i % 4 === 0) {
-        sprite.moveTo(-size, 0).lineTo(size, 0).stroke({ width: Math.max(2, size * 0.55), color: secondaryColor, alpha: 0.88 });
+        sprite.moveTo(-size * 1.35, 0).lineTo(size * 1.35, 0).stroke({ width: Math.max(2, size * 0.55), color: secondaryColor, alpha: 0.88 });
+        sprite.moveTo(0, -size * 0.62).lineTo(0, size * 0.62).stroke({ width: Math.max(1.5, size * 0.28), color, alpha: 0.6 });
       } else {
         sprite.circle(0, 0, size).fill({ color: i % 2 === 0 ? color : secondaryColor, alpha: 0.86 });
+        sprite.circle(0, 0, size * 1.9).stroke({ width: Math.max(1, size * 0.18), color, alpha: 0.22 });
       }
       sprite.rotation = angle;
       root.addChild(sprite);
@@ -76,6 +94,8 @@ export class DestructionBurst {
     this.bursts.push({
       root,
       ring,
+      coreFlash,
+      shockRings,
       particles,
       age: 0,
       lifeMs: options.lifeMs ?? (isLastSave ? LAST_SAVE_LIFE_MS : NORMAL_LIFE_MS),
@@ -101,6 +121,12 @@ export class DestructionBurst {
 
       burst.root.alpha = alpha;
       burst.ring.scale.set(1 + eased * (burst.isLastSave ? 2.1 : 1.35));
+      burst.coreFlash.scale.set(1 + eased * (burst.isLastSave ? 1.4 : 1.0));
+      burst.coreFlash.alpha = Math.max(0, 1 - t * 1.8);
+      burst.shockRings.forEach((shock, index) => {
+        shock.scale.set(1 + eased * (burst.isLastSave ? 2.8 + index * 0.45 : 1.7 + index * 0.3));
+        shock.alpha = Math.max(0, alpha * (0.95 - index * 0.18));
+      });
 
       for (const particle of burst.particles) {
         const dist = particle.distance * eased;

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Orbit Slash</string>
+    <string name="title_activity_main">Orbit Slash</string>
+    <string name="package_name">com.kangsungbae.orbitslash</string>
+    <string name="custom_url_scheme">com.kangsungbae.orbitslash</string>
+</resources>

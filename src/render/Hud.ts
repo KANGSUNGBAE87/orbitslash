@@ -5,6 +5,7 @@ import type { BossHudState } from "../game/BossHudState";
 import type { TutorialHudState } from "../game/TutorialHudState";
 import { t } from "../i18n";
 import { energyLabel, scoreLabel, timeLabel, comboLabel } from "../ui/hud-labels";
+import { drawSkillGestureIcon } from "./SkillGestureIcon";
 
 export interface HudState {
   energy: number;
@@ -20,6 +21,7 @@ export interface HudState {
   waveNumber: number;
   waveProgressRatio: number;
   nextWaveInMs: number;
+  waveVisible?: boolean;
   boss?: BossHudState;
   shield?: ShieldHudState;
   tutorial?: TutorialHudState;
@@ -39,10 +41,11 @@ export interface SkillCooldownSlot {
   label: string;
   ratio: number;
   cooldownRatio: number;
+  cooldownProgressRatio: number;
   ready: boolean;
   cooldownMs: number;
   active: boolean;
-  visualState: "locked" | "charging" | "cooldown" | "ready";
+  visualState: "locked" | "insufficient" | "charging" | "cooldown" | "ready";
 }
 
 export interface TopSkillSlotLayout {
@@ -84,9 +87,11 @@ const SKILL_ROW_Y = 1548;
 const SKILL_ROW_W = BASE_WIDTH - SKILL_ROW_X * 2;
 const SKILL_ROW_H = 266;
 const SKILL_ORB_R = 62;
-const SKILL_ORB_Y = 1674;
+const SKILL_ORB_Y = 1682;
 const SKILL_CARD_W = 184;
 const SKILL_CARD_H = 224;
+const SKILL_NAME_Y_OFFSET = 28;
+const SKILL_STATUS_BOTTOM_OFFSET = 24;
 const WAVE_BAR_X = 72;
 const WAVE_BAR_Y = 312;
 const WAVE_BAR_W = BASE_WIDTH - WAVE_BAR_X * 2;
@@ -105,9 +110,9 @@ const EARTH_ENERGY_BAR_W = BASE_WIDTH - EARTH_ENERGY_BAR_X * 2;
 const EARTH_ENERGY_BAR_H = 52;
 const EARTH_ENERGY_BAR_Y = BASE_HEIGHT - 92;
 const TUTORIAL_PANEL_X = 86;
-const TUTORIAL_PANEL_Y = 1390;
+const TUTORIAL_PANEL_Y = 1358;
 const TUTORIAL_PANEL_W = BASE_WIDTH - TUTORIAL_PANEL_X * 2;
-const TUTORIAL_PANEL_H = 128;
+const TUTORIAL_PANEL_H = 170;
 const BLOCKED_PANEL_X = 130;
 const BLOCKED_PANEL_Y = 1048;
 const BLOCKED_PANEL_W = BASE_WIDTH - BLOCKED_PANEL_X * 2;
@@ -166,6 +171,7 @@ export class Hud {
   private blockedAge = Infinity;
 
   private skillRow: Graphics;
+  private skillGestureLayer: Container;
   private waveGauge: Graphics;
   private waveText: Text;
   private bossGauge: Graphics;
@@ -177,6 +183,7 @@ export class Hud {
   private tutorialPanel: Graphics;
   private tutorialTitle: Text;
   private tutorialMessage: Text;
+  private slotGestureGraphics: Graphics[] = [];
   private slotCenterTexts: Text[] = [];
   private slotLabelTexts: Text[] = [];
   private readyPulse = 0;
@@ -187,16 +194,16 @@ export class Hud {
     this.container.zIndex = LAYER.HUD_PANELS;
     this.container.sortableChildren = true;
 
-    this.energyText = new Text({ text: "", style: label({ fontSize: 30, fontWeight: "bold", fill: 0xe0f7ff, align: "center" }) });
+    this.energyText = new Text({ text: "", style: label({ fontSize: 36, fontWeight: "bold", fill: 0xe0f7ff, align: "center" }) });
     this.energyText.anchor.set(0.5);
     this.energyText.position.set(BASE_WIDTH / 2, EARTH_ENERGY_BAR_Y + EARTH_ENERGY_BAR_H / 2);
 
-    this.scoreText = new Text({ text: "", style: label({ fontSize: 31, fontWeight: "bold", align: "left" }) });
+    this.scoreText = new Text({ text: "", style: label({ fontSize: 36, fontWeight: "bold", align: "left" }) });
     this.scoreText.anchor.set(0, 0);
     this.scoreText.position.set(40, 32);
 
     const metrics = hudLayoutMetrics();
-    this.timeText = new Text({ text: "", style: label({ fontSize: 35, fontWeight: "bold", fill: 0xf5b042, align: "center" }) });
+    this.timeText = new Text({ text: "", style: label({ fontSize: 42, fontWeight: "bold", fill: 0xf5b042, align: "center" }) });
     this.timeText.anchor.set(metrics.time.anchorX, 0);
     this.timeText.position.set(metrics.time.x, metrics.time.y);
 
@@ -210,38 +217,41 @@ export class Hud {
 
     this.blockedPanel = new Graphics();
     this.blockedPanel.label = "blocked-weak-point-panel";
-    this.blockedTitle = new Text({ text: "", style: label({ fontSize: 33, fontWeight: "bold", fill: 0xffc14d, align: "center" }) });
+    this.blockedTitle = new Text({ text: "", style: label({ fontSize: 40, fontWeight: "bold", fill: 0xffc14d, align: "center" }) });
     this.blockedTitle.label = "blocked-weak-point-title";
     this.blockedTitle.anchor.set(0.5);
     this.blockedTitle.position.set(BASE_WIDTH / 2, BLOCKED_PANEL_Y + 36);
     this.blockedMessage = new Text({
       text: "",
-      style: label({ fontSize: 27, fontWeight: "bold", fill: 0xffffff, align: "center", wordWrap: true, wordWrapWidth: BLOCKED_PANEL_W - 140 }),
+      style: label({ fontSize: 32, fontWeight: "bold", fill: 0xffffff, align: "center", wordWrap: true, wordWrapWidth: BLOCKED_PANEL_W - 140 }),
     });
     this.blockedMessage.label = "blocked-weak-point-message";
     this.blockedMessage.anchor.set(0.5, 0);
     this.blockedMessage.position.set(BASE_WIDTH / 2, BLOCKED_PANEL_Y + 68);
 
     this.skillRow = new Graphics();
+    this.skillRow.label = "skill-slots";
+    this.skillGestureLayer = new Container();
+    this.skillGestureLayer.label = "skill-gestures";
     this.waveGauge = new Graphics();
-    this.waveText = new Text({ text: "", style: label({ fontSize: 23, fontWeight: "bold", fill: 0xdbeafe, align: "center" }) });
+    this.waveText = new Text({ text: "", style: label({ fontSize: 29, fontWeight: "bold", fill: 0xdbeafe, align: "center" }) });
     this.waveText.anchor.set(0.5, 0.5);
     this.waveText.position.set(BASE_WIDTH / 2, WAVE_BAR_Y + WAVE_BAR_H + 22);
 
     this.bossGauge = new Graphics();
-    this.bossText = new Text({ text: "", style: label({ fontSize: 24, fontWeight: "bold", fill: 0xffedd5, align: "center" }) });
+    this.bossText = new Text({ text: "", style: label({ fontSize: 30, fontWeight: "bold", fill: 0xffedd5, align: "center" }) });
     this.bossText.anchor.set(0.5);
     this.bossText.position.set(BASE_WIDTH / 2, BOSS_BAR_Y + BOSS_BAR_H / 2);
     this.bossObjectiveText = new Text({
       text: "",
-      style: label({ fontSize: 22, fontWeight: "bold", fill: 0xffd7a3, align: "center", wordWrap: true, wordWrapWidth: BOSS_BAR_W + 180 }),
+      style: label({ fontSize: 28, fontWeight: "bold", fill: 0xffd7a3, align: "center", wordWrap: true, wordWrapWidth: BOSS_BAR_W + 180 }),
     });
     this.bossObjectiveText.label = "boss-objective-text";
     this.bossObjectiveText.anchor.set(0.5, 0.5);
     this.bossObjectiveText.position.set(BASE_WIDTH / 2, BOSS_OBJECTIVE_Y);
 
     this.shieldGauge = new Graphics();
-    this.shieldText = new Text({ text: "", style: label({ fontSize: 22, fontWeight: "bold", fill: 0xdbeafe, align: "center" }) });
+    this.shieldText = new Text({ text: "", style: label({ fontSize: 28, fontWeight: "bold", fill: 0xdbeafe, align: "center" }) });
     this.shieldText.anchor.set(0.5);
     this.shieldText.position.set(BASE_WIDTH / 2, SHIELD_BAR_Y + SHIELD_BAR_H / 2);
 
@@ -249,14 +259,15 @@ export class Hud {
     this.tutorialPanel = new Graphics();
     this.tutorialTitle = new Text({
       text: "",
-      style: label({ fontSize: 25, fontWeight: "bold", fill: 0x9fe9ff, align: "left" }),
+      style: label({ fontSize: 30, fontWeight: "bold", fill: 0x9fe9ff, align: "left" }),
     });
     this.tutorialTitle.anchor.set(0, 0);
     this.tutorialTitle.position.set(TUTORIAL_PANEL_X + 32, TUTORIAL_PANEL_Y + 20);
     this.tutorialMessage = new Text({
       text: "",
       style: label({
-        fontSize: 31,
+        fontSize: 33,
+        lineHeight: 38,
         fontWeight: "bold",
         fill: 0xffffff,
         align: "left",
@@ -269,6 +280,7 @@ export class Hud {
 
     this.container.addChild(
       this.skillRow,
+      this.skillGestureLayer,
       this.waveGauge,
       this.bossGauge,
       this.shieldGauge,
@@ -361,16 +373,25 @@ export class Hud {
     this.ensureSlotTexts(slots.length);
     this.skillRow.clear();
     this.skillRow
+      .roundRect(SKILL_ROW_X + 6, SKILL_ROW_Y + 8, SKILL_ROW_W, SKILL_ROW_H, 34)
+      .fill({ color: 0x000000, alpha: 0.34 });
+    this.skillRow
       .roundRect(SKILL_ROW_X, SKILL_ROW_Y, SKILL_ROW_W, SKILL_ROW_H, 30)
-      .fill({ color: 0x080b16, alpha: 0.58 });
+      .fill({ color: 0x080b16, alpha: 0.62 });
+    this.skillRow
+      .roundRect(SKILL_ROW_X + 10, SKILL_ROW_Y + 10, SKILL_ROW_W - 20, SKILL_ROW_H - 20, 24)
+      .stroke({ width: 2, color: 0x3fd8ff, alpha: 0.13 });
 
     for (let i = 0; i < this.slotCenterTexts.length; i += 1) {
       const slot = slots[i];
       const cell = layout[i];
       const centerText = this.slotCenterTexts[i]!;
       const labelText = this.slotLabelTexts[i]!;
+      const gesture = this.slotGestureGraphics[i]!;
       centerText.visible = Boolean(slot && cell);
       labelText.visible = Boolean(slot && cell);
+      gesture.clear();
+      gesture.visible = Boolean(slot && cell);
       if (!slot || !cell) continue;
 
       const ready = slot.visualState === "ready";
@@ -381,21 +402,36 @@ export class Hud {
       const rim = ready ? 0xffc14d : cooldown ? 0xf97316 : charging ? 0x3fd8ff : 0x475569;
       const fill = ready ? 0xf59e0b : locked ? 0x111827 : 0x172033;
 
-      this.skillRow.roundRect(cell.cardX, cell.cardY, cell.cardW, cell.cardH, 24).fill({ color: 0x050914, alpha: locked ? 0.42 : 0.68 });
-      this.skillRow.roundRect(cell.cardX, cell.cardY, cell.cardW, cell.cardH, 24).stroke({ width: ready ? 3 : 1.5, color: rim, alpha: ready ? 0.8 : 0.35 });
+      this.skillRow.roundRect(cell.cardX + 5, cell.cardY + 8, cell.cardW, cell.cardH, 24).fill({ color: 0x000000, alpha: locked ? 0.28 : 0.38 });
+      this.skillRow.roundRect(cell.cardX, cell.cardY, cell.cardW, cell.cardH, 24).fill({ color: 0x050914, alpha: locked ? 0.44 : 0.72 });
+      this.skillRow.roundRect(cell.cardX + 4, cell.cardY + 4, cell.cardW - 8, cell.cardH * 0.42, 20).fill({ color: rim, alpha: locked ? 0.05 : 0.1 });
+      this.skillRow.roundRect(cell.cardX, cell.cardY, cell.cardW, cell.cardH, 24).stroke({ width: ready ? 4 : 2, color: rim, alpha: ready ? 0.86 : 0.38 });
       if (ready) {
-        this.skillRow.circle(cell.x, cell.y, cell.radius + 7 + pulse * 9).stroke({ width: 8, color: 0xffd166, alpha: 0.25 + pulse * 0.4 });
+        this.skillRow.circle(cell.x, cell.y, cell.radius + 13 + pulse * 11).stroke({ width: 10, color: 0xffd166, alpha: 0.24 + pulse * 0.42 });
+        this.skillRow.circle(cell.x, cell.y, cell.radius + 26 + pulse * 18).stroke({ width: 4, color: 0xffffff, alpha: 0.12 + pulse * 0.18 });
       }
 
-      this.skillRow.circle(cell.x, cell.y, cell.radius).fill({ color: fill, alpha: locked ? 0.45 : 0.88 });
-      this.skillRow.circle(cell.x, cell.y, cell.radius).stroke({ width: 9, color: 0x1e293b, alpha: locked ? 0.55 : 0.85 });
+      this.skillRow.circle(cell.x, cell.y + 4, cell.radius + 8).fill({ color: 0x000000, alpha: 0.32 });
+      this.skillRow.circle(cell.x, cell.y, cell.radius).fill({ color: fill, alpha: locked ? 0.48 : 0.9 });
+      this.skillRow.circle(cell.x - cell.radius * 0.2, cell.y - cell.radius * 0.25, cell.radius * 0.72).fill({ color: 0xffffff, alpha: locked ? 0.03 : 0.08 });
+      this.skillRow.circle(cell.x, cell.y, cell.radius).stroke({ width: 10, color: 0x1e293b, alpha: locked ? 0.58 : 0.88 });
+      this.skillRow.circle(cell.x, cell.y, cell.radius - 12).stroke({ width: 2, color: 0xffffff, alpha: locked ? 0.05 : 0.16 });
 
-      const ringRatio = cooldown ? 1 - slot.cooldownRatio : slot.ratio;
-      if (ringRatio > 0) {
-        const start = -Math.PI / 2;
+      // 바깥 링은 슬롯별 충전량, 안쪽 링은 해당 슬롯의 쿨타임 진행만 표시한다.
+      const start = -Math.PI / 2;
+      const chargeRatio = Math.max(0, Math.min(1, slot.ratio));
+      if (slot.active && chargeRatio > 0) {
         this.skillRow.moveTo(cell.x, cell.y - cell.radius);
-        this.skillRow.arc(cell.x, cell.y, cell.radius, start, start + Math.min(1, ringRatio) * Math.PI * 2);
-        this.skillRow.stroke({ width: 10, color: rim, alpha: locked ? 0.25 : 0.95 });
+        this.skillRow.arc(cell.x, cell.y, cell.radius, start, start + chargeRatio * Math.PI * 2);
+        this.skillRow.stroke({ width: 9, color: 0x3fd8ff, alpha: 0.96, cap: "round" });
+      }
+
+      const cooldownProgressRatio = Math.max(0, Math.min(1, slot.cooldownProgressRatio));
+      const cooldownRadius = cell.radius - 12;
+      if (cooldown && cooldownProgressRatio > 0) {
+        this.skillRow.moveTo(cell.x, cell.y - cooldownRadius);
+        this.skillRow.arc(cell.x, cell.y, cooldownRadius, start, start + cooldownProgressRatio * Math.PI * 2);
+        this.skillRow.stroke({ width: 8, color: 0xf97316, alpha: 0.96, cap: "round" });
       }
 
       if (ready) {
@@ -405,28 +441,45 @@ export class Hud {
         this.skillRow.stroke({ width: 6, color: 0xffffff, alpha: 0.22, cap: "round" });
       }
 
-      centerText.text = centerTextForSlot(slot);
-      centerText.style.fill = ready ? 0x111827 : locked ? 0x94a3b8 : 0xffffff;
-      centerText.style.fontSize = ready ? 27 : 30;
-      centerText.position.set(cell.x, cell.y);
+      drawSkillGestureIcon(gesture, slot.id, cell.x, cell.y - 5, cell.radius * 0.58, ready ? 0xffd166 : locked ? 0x64748b : 0xb7efff, locked ? 0.14 : 0.24);
+      drawSkillGestureIcon(gesture, slot.id, cell.x, cell.y - 5, cell.radius * 0.5, ready ? 0xfff3c4 : locked ? 0x64748b : 0xe0f7ff, locked ? 0.34 : ready ? 0.98 : 0.78);
 
-      labelText.text = shortSkillLabel(slot);
+      centerText.text = centerTextForSlot(slot);
+      centerText.style.fill = ready ? 0xfff3c4 : locked ? 0x94a3b8 : 0xffffff;
+      centerText.style.fontSize = ready ? 28 : 27;
+      centerText.position.set(cell.x, cell.cardY + cell.cardH - SKILL_STATUS_BOTTOM_OFFSET);
+
+      labelText.text = skillLabel(slot);
       labelText.style.fill = ready ? 0xffd166 : locked ? 0x64748b : 0xdbeafe;
-      labelText.position.set(cell.x, SKILL_ROW_Y + SKILL_ROW_H - 24);
+      labelText.style.fontSize = skillNameFontSize(slot.label);
+      labelText.style.wordWrap = true;
+      labelText.style.wordWrapWidth = SKILL_CARD_W - 14;
+      labelText.position.set(cell.x, cell.cardY + SKILL_NAME_Y_OFFSET);
     }
   }
 
   private drawWaveGauge(s: HudState): void {
+    const visible = s.waveVisible !== false;
+    this.waveGauge.visible = visible;
+    this.waveText.visible = visible;
+    if (!visible) {
+      this.waveGauge.clear();
+      this.waveText.text = "";
+      return;
+    }
     const ratio = Math.max(0, Math.min(1, s.waveProgressRatio));
     this.waveGauge.clear();
-    this.waveGauge.roundRect(WAVE_BAR_X, WAVE_BAR_Y, WAVE_BAR_W, WAVE_BAR_H, 15).fill({ color: 0x111827, alpha: 0.84 });
-    this.waveGauge.roundRect(WAVE_BAR_X, WAVE_BAR_Y, WAVE_BAR_W * ratio, WAVE_BAR_H, 15).fill({ color: 0x3fd8ff, alpha: 0.96 });
+    this.waveGauge.roundRect(WAVE_BAR_X + 4, WAVE_BAR_Y + 7, WAVE_BAR_W, WAVE_BAR_H, 16).fill({ color: 0x000000, alpha: 0.34 });
+    this.waveGauge.roundRect(WAVE_BAR_X, WAVE_BAR_Y, WAVE_BAR_W, WAVE_BAR_H, 16).fill({ color: 0x111827, alpha: 0.86 });
+    this.waveGauge.roundRect(WAVE_BAR_X, WAVE_BAR_Y, WAVE_BAR_W * ratio, WAVE_BAR_H, 16).fill({ color: 0x3fd8ff, alpha: 0.96 });
+    this.waveGauge.roundRect(WAVE_BAR_X + 6, WAVE_BAR_Y + 6, Math.max(0, WAVE_BAR_W * ratio - 12), WAVE_BAR_H * 0.34, 10).fill({ color: 0xffffff, alpha: ratio > 0 ? 0.18 : 0 });
     for (let i = 1; i < 6; i += 1) {
       const x = WAVE_BAR_X + (WAVE_BAR_W * i) / 6;
       this.waveGauge.moveTo(x, WAVE_BAR_Y - 5).lineTo(x, WAVE_BAR_Y + WAVE_BAR_H + 5);
       this.waveGauge.stroke({ width: 3, color: i === 5 ? 0xffc14d : 0xffffff, alpha: i === 5 ? 0.7 : 0.24 });
     }
-    this.waveGauge.roundRect(WAVE_BAR_X, WAVE_BAR_Y, WAVE_BAR_W, WAVE_BAR_H, 15).stroke({ width: 3, color: 0x274060, alpha: 0.95 });
+    this.waveGauge.roundRect(WAVE_BAR_X, WAVE_BAR_Y, WAVE_BAR_W, WAVE_BAR_H, 16).stroke({ width: 4, color: 0x274060, alpha: 0.95 });
+    this.waveGauge.roundRect(WAVE_BAR_X - 5, WAVE_BAR_Y - 5, WAVE_BAR_W + 10, WAVE_BAR_H + 10, 20).stroke({ width: 2, color: 0x7dd3fc, alpha: 0.2 });
 
     const seconds = Math.ceil(s.nextWaveInMs / 1000);
     this.waveText.text = `${t("hud.wave")} ${s.waveNumber}  ·  ${secondsLabel(seconds)}`;
@@ -491,6 +544,13 @@ export class Hud {
 
     this.earthEnergyGauge.clear();
     this.earthEnergyGauge.roundRect(
+      EARTH_ENERGY_BAR_X + 5,
+      EARTH_ENERGY_BAR_Y + 7,
+      EARTH_ENERGY_BAR_W,
+      EARTH_ENERGY_BAR_H,
+      22,
+    ).fill({ color: 0x000000, alpha: 0.42 });
+    this.earthEnergyGauge.roundRect(
       EARTH_ENERGY_BAR_X,
       EARTH_ENERGY_BAR_Y,
       EARTH_ENERGY_BAR_W,
@@ -504,6 +564,13 @@ export class Hud {
       EARTH_ENERGY_BAR_H,
       22,
     ).fill({ color: fill, alpha: 0.94 });
+    this.earthEnergyGauge.roundRect(
+      EARTH_ENERGY_BAR_X + 8,
+      EARTH_ENERGY_BAR_Y + 8,
+      Math.max(0, EARTH_ENERGY_BAR_W * ratio - 16),
+      EARTH_ENERGY_BAR_H * 0.32,
+      12,
+    ).fill({ color: 0xffffff, alpha: ratio > 0 ? 0.18 : 0 });
     this.earthEnergyGauge.roundRect(
       EARTH_ENERGY_BAR_X - 4,
       EARTH_ENERGY_BAR_Y - 4,
@@ -539,31 +606,57 @@ export class Hud {
 
   private ensureSlotTexts(count: number): void {
     while (this.slotCenterTexts.length < count) {
-      const center = new Text({ text: "", style: label({ fontSize: 30, fontWeight: "bold", fill: 0xffffff, align: "center" }) });
+      const index = this.slotCenterTexts.length;
+      const gesture = new Graphics();
+      gesture.label = `skill-slot-gesture-${index}`;
+      const center = new Text({ text: "", style: label({ fontSize: 27, fontWeight: "bold", fill: 0xffffff, align: "center" }) });
+      center.label = `skill-slot-status-${index}`;
       center.anchor.set(0.5);
-      const name = new Text({ text: "", style: label({ fontSize: 18, fontWeight: "bold", fill: 0xdbeafe, align: "center" }) });
+      const name = new Text({
+        text: "",
+        style: label({
+          fontSize: 24,
+          fontWeight: "bold",
+          fill: 0xdbeafe,
+          align: "center",
+          wordWrap: true,
+          wordWrapWidth: SKILL_CARD_W - 14,
+          lineHeight: 25,
+        }),
+      });
+      name.label = `skill-slot-name-${index}`;
       name.anchor.set(0.5);
+      this.slotGestureGraphics.push(gesture);
       this.slotCenterTexts.push(center);
       this.slotLabelTexts.push(name);
+      this.skillGestureLayer.addChild(gesture);
       this.container.addChild(center, name);
     }
   }
 }
 
 function centerTextForSlot(slot: SkillCooldownSlot): string {
-  if (slot.visualState === "locked") return "·";
+  if (slot.visualState === "locked") return t("status.locked");
+  if (slot.visualState === "insufficient") return t("skill.gaugeRequired");
   if (slot.visualState === "ready") return t("skill.ready");
   if (slot.visualState === "cooldown") return secondsLabel(Math.ceil(slot.cooldownMs / 1000));
-  return `${Math.floor(slot.ratio * 100)}%`;
+  const chargePercent = Math.round(Math.max(0, Math.min(1, slot.ratio)) * 100);
+  return `${chargePercent}%`;
 }
 
 function secondsLabel(seconds: number): string {
   return t("unit.seconds", { value: seconds });
 }
 
-function shortSkillLabel(slot: SkillCooldownSlot): string {
-  if (slot.label.length <= 5) return slot.label;
-  return slot.label.slice(0, 5);
+function skillLabel(slot: SkillCooldownSlot): string {
+  return slot.label;
+}
+
+function skillNameFontSize(labelText: string): number {
+  if (labelText.length >= 12) return 19;
+  if (labelText.length >= 10) return 21;
+  if (labelText.length >= 7) return 23;
+  return 25;
 }
 
 function formatTime(ms: number): string {

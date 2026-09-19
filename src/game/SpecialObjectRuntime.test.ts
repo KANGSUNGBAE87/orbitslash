@@ -12,6 +12,20 @@ const policy: SpecialObjectPolicy = {
 };
 
 describe("SpecialObjectRuntime", () => {
+  it("defers an overdue schedule without creating an active object", () => {
+    const runtime = new SpecialObjectRuntime(createRng(1), policy, {
+      firstSpawnMs: 12_000,
+      spawnIntervalMs: 14_000,
+      maxActive: 1,
+    });
+
+    runtime.deferUntil(12_000);
+
+    expect(runtime.getAlive()).toEqual([]);
+    expect(runtime.next(25_999, { energy: 100, maxEnergy: 100 })).toEqual([]);
+    expect(runtime.next(26_000, { energy: 100, maxEnergy: 100 })).toHaveLength(1);
+  });
+
   it("spawns only objects enabled by mode policy and prioritizes capsules when energy is low", () => {
     const runtime = new SpecialObjectRuntime(createRng(1), policy, {
       firstSpawnMs: 1000,

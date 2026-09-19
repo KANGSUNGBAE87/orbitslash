@@ -4,6 +4,7 @@ import scoringJson from "../data/scoring.json";
 import type { ScoringConfig, HitResult } from "./types";
 
 const cfg = scoringJson as unknown as ScoringConfig;
+const combatGaugeMultiplier = cfg.combatGaugeGainMultiplier ?? 1;
 
 const hit = (band: HitResult["band"], enemyId = 1): HitResult => ({
   enemyId,
@@ -100,14 +101,14 @@ describe("ScoringSystem.onHit (콤보 += N, Multi Cut, 게이지, Last Save)", (
     const s = new ScoringSystem(cfg);
     // 2마리 basic_meteor(+2 each) = 4, comboKill +2 = 6
     const out = s.onHit([hit("outer", 1), hit("outer", 2)], () => 100, () => "basic_meteor");
-    expect(out.gauge).toBe(4 + 2);
+    expect(out.gauge).toBe((4 + 2) * combatGaugeMultiplier);
   });
 
   it("directional accuracy면 directionalCut 게이지를 추가한다", () => {
     const s = new ScoringSystem(cfg);
     const out = s.onHit([{ ...hit("outer", 1), accuracy: "directional" }], () => 100, () => "fast_comet");
 
-    expect(out.gauge).toBe(2 + 3);
+    expect(out.gauge).toBe((2 + 3) * combatGaugeMultiplier);
   });
 
   it("Last Save 밴드면 lastSave 플래그 true + 게이지 +8", () => {
@@ -115,7 +116,7 @@ describe("ScoringSystem.onHit (콤보 += N, Multi Cut, 게이지, Last Save)", (
     const out = s.onHit([hit("lastSave", 1)], () => 100, () => "basic_meteor");
     expect(out.lastSave).toBe(true);
     // basic +2, lastSave +8 (콤보 1마리라 comboKill 없음)
-    expect(out.gauge).toBe(2 + 8);
+    expect(out.gauge).toBe((2 + 8) * combatGaugeMultiplier);
   });
 
   it("comboGainPerSlashCap=null → 무제한 (5마리면 +5)", () => {

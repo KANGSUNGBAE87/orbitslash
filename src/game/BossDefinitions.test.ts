@@ -14,6 +14,11 @@ describe("BossDefinitions", () => {
     }
   });
 
+  it("keeps the active five-boss roster isolated from future live-ops content", () => {
+    expect(BOSS_IDS).toEqual(["eclipse_core", "ringed_destroyer", "lava_titan", "ice_colossus", "dark_planet"]);
+    expect(Object.keys(BOSS_DEFINITIONS)).toEqual(BOSS_IDS);
+  });
+
   it("gives every boss phases and weak point metadata", () => {
     for (const bossId of BOSS_IDS) {
       const boss = BOSS_DEFINITIONS[bossId];

@@ -35,7 +35,19 @@ export interface PlatformTelemetryContext {
 export interface PurchaseResult {
   success: boolean;
   productId: string;
-  reason?: "platform_not_supported" | "purchase_failed" | "cancelled";
+  reason?: "platform_not_supported" | "purchase_failed" | "cancelled" | "verification_required";
+}
+
+export interface PurchaseRestoreResult {
+  supported: boolean;
+  productIds: string[];
+}
+
+export interface SafeAreaInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
 }
 
 export interface PlatformAnalyticsEvent {
@@ -48,12 +60,21 @@ export interface PlatformAnalyticsEvent {
 
 export interface IPlatformAdapter {
   login(): Promise<AuthResult>;
+  /**
+   * Returns only a server-issued app session token after the platform proof has
+   * already been verified by a backend boundary. Never return a raw provider
+   * identifier or synthesize a token from a platform user id.
+   */
+  getVerifiedSessionAccessToken?(): Promise<string | null>;
   telemetryContext(): PlatformTelemetryContext;
   rewardedAdCapability(): Promise<RewardedAdCapability>;
   showRewardedAd(): Promise<AdResult>;
   purchase(productId: string): Promise<PurchaseResult>;
+  restorePurchases?(): Promise<PurchaseRestoreResult>;
   storageGet(key: string): Promise<string | null>;
   storageSet(key: string, value: string): Promise<void>;
   haptic(kind: "light" | "medium" | "heavy"): void;
+  safeAreaInsets?(): Promise<SafeAreaInsets>;
+  subscribeLifecycle?(listener: (event: "background" | "foreground") => void): Promise<() => Promise<void>>;
   trackAnalyticsEvent(event: PlatformAnalyticsEvent): Promise<void>;
 }

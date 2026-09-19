@@ -10,6 +10,7 @@
   ],
   "comboGainPerSlashCap": null,
   "comboChainTimeoutMs": 650,
+  "combatGaugeGainMultiplier": 1.5,
   "multiCutBonus": { "double": 50, "triple": 120, "mega": 400, "orbital_master": 1000 },
   "gaugeGain": {
     "shard_meteor": 1,

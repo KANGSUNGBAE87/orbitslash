@@ -22,6 +22,7 @@ export interface RankedReplaySpawnEvent {
 }
 
 export interface RankedReplayHitEvent {
+  eventSequence?: number;
   spawnOrdinal: number;
   hitAtMs: number;
   band: DistanceBand;
@@ -45,6 +46,7 @@ export interface RankedReplayComboBreakEvent {
 }
 
 export interface RankedReplaySkillEvent {
+  eventSequence?: number;
   skillId: SkillId;
   atMs: number;
 }

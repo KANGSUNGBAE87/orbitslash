@@ -79,6 +79,13 @@ export class SpecialObjectRuntime {
     return spawned;
   }
 
+  /** Advances a suppressed tutorial window without creating an active object. */
+  deferUntil(elapsedMs: number): void {
+    if (elapsedMs < this.nextSpawnAtMs) return;
+    const intervalMs = Math.max(1, this.options.spawnIntervalMs ?? DEFAULT_SPAWN_INTERVAL_MS);
+    while (this.nextSpawnAtMs <= elapsedMs) this.nextSpawnAtMs += intervalMs;
+  }
+
   getAlive(): SpecialObjectState[] {
     return this.active.filter((object) => object.alive);
   }

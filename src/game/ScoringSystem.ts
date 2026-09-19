@@ -64,7 +64,7 @@ type EnemyTypeFn = (enemyId: number) => string;
  * 한 슬래시의 HitResult[]를 받아 점수/콤보/게이지/Last Save를 갱신한다.
  * - 콤보 += hits.length (cap = comboGainPerSlashCap, null=무제한)
  * - Multi Cut tier 보너스 1회 가산 (콤보와 독립)
- * - 게이지 += Σ gaugeGain(적별) + comboKill + lastSave
+ * - 전투 게이지 += (Σ gaugeGain(적별) + comboKill + lastSave) × combatGaugeGainMultiplier
  * - baseScore는 주입된 콜백(enemies.json.score)에서 취득
  */
 export class ScoringSystem {
@@ -126,6 +126,7 @@ export class ScoringSystem {
     if (hits.length >= 2) {
       gauge += this.cfg.gaugeGain.comboKill ?? 0;
     }
+    gauge *= this.cfg.combatGaugeGainMultiplier ?? 1;
 
     // Multi Cut flat 보너스 (등급당 1회)
     const tier = multiCutTier(hits.length);

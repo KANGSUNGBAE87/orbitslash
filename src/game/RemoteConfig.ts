@@ -4,6 +4,8 @@ import difficultyJson from "../data/difficulty.json";
 import skillsJson from "../data/skills.json";
 import orbitsJson from "../data/orbits.json";
 import wavesJson from "../data/waves.json";
+import { disabledLiveOpsConfig, parseLiveOpsConfig, type LiveOpsConfig } from "./liveops/SeasonCatalog";
+import { LOCAL_RETENTION_CONFIG, parseRetentionConfig, type RetentionConfig } from "./retention/RetentionConfig";
 import type {
   EnemyTable,
   ScoringConfig,
@@ -39,11 +41,13 @@ export interface IRemoteConfig {
   getSkills(): SkillTable;
   getOrbits(): OrbitProfile[];
   getWaves(): WaveTable;
+  getLiveOps(): LiveOpsConfig;
+  getRetention(): RetentionConfig;
   status(): RemoteConfigStatus;
   ready(): Promise<void>;
 }
 
-const TABLE_KEYS = ["enemies", "scoring", "difficulty", "skills", "orbits", "waves"] as const;
+const TABLE_KEYS = ["enemies", "scoring", "difficulty", "skills", "orbits", "waves", "liveops", "retention"] as const;
 type ConfigTableKey = (typeof TABLE_KEYS)[number];
 
 const tables: Record<ConfigTableKey, unknown> = {
@@ -53,6 +57,8 @@ const tables: Record<ConfigTableKey, unknown> = {
   skills: skillsJson,
   orbits: orbitsJson,
   waves: wavesJson,
+  liveops: disabledLiveOpsConfig(),
+  retention: LOCAL_RETENTION_CONFIG,
 };
 
 class LocalRemoteConfig implements IRemoteConfig {
@@ -90,6 +96,14 @@ class LocalRemoteConfig implements IRemoteConfig {
 
   getWaves(): WaveTable {
     return this.activeTables.waves as WaveTable;
+  }
+
+  getLiveOps(): LiveOpsConfig {
+    return this.activeTables.liveops as LiveOpsConfig;
+  }
+
+  getRetention(): RetentionConfig {
+    return this.activeTables.retention as RetentionConfig;
   }
 
   status(): RemoteConfigStatus {
@@ -131,6 +145,14 @@ class LocalRemoteConfig implements IRemoteConfig {
       const nextTables: Record<ConfigTableKey, unknown> = { ...tables };
       for (const key of TABLE_KEYS) {
         const value = payload.tables?.[key];
+        if (key === "liveops") {
+          if (value !== undefined) nextTables.liveops = parseLiveOpsConfig(value) ?? disabledLiveOpsConfig();
+          continue;
+        }
+        if (key === "retention") {
+          if (value !== undefined) nextTables.retention = parseRetentionConfig(value) ?? LOCAL_RETENTION_CONFIG;
+          continue;
+        }
         if (isPlainObject(value)) nextTables[key] = value;
       }
       this.activeTables = nextTables;

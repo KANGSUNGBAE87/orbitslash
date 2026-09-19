@@ -1,3 +1,5 @@
+import ts from "typescript";
+
 export interface SourceFileForScan {
   path: string;
   content: string;
@@ -10,6 +12,7 @@ export interface ReleaseBoundaryViolation {
     | "server_secret_in_client_code"
     | "raw_identity_in_client_code"
     | "dev_qa_token_in_production_bundle"
+    | "platform_sdk_in_wrong_boundary"
     | "target_specific_api_in_wrong_bundle"
     | "misleading_release_claim";
   token: string;
@@ -48,6 +51,24 @@ const RAW_IDENTITY_TOKENS = [
 ];
 
 const DEV_QA_PRODUCTION_TOKENS = ["qaMode", "qaPreset", "qaGauge"];
+const GOOGLE_PLAY_SDK_TOKENS = [
+  { token: "@capacitor/", pattern: /@capacitor\// },
+  { token: "BillingClient", pattern: /BillingClient/ },
+  { token: "GooglePlayBilling", pattern: /GooglePlayBilling/ },
+  { token: "CredentialManager", pattern: /CredentialManager/ },
+  { token: "AdMob", pattern: /AdMob/ },
+  { token: "com.android.billingclient", pattern: /com\.android\.billingclient/ },
+  { token: "com.google.android.gms.ads", pattern: /com\.google\.android\.gms\.ads/ },
+  { token: "play.google.com", pattern: /play\.google\.com/i },
+  { token: "market://", pattern: /market:\/\//i },
+];
+const APPS_IN_TOSS_SDK_TOKENS = [
+  { token: "@apps-in-toss/", pattern: /@apps-in-toss\// },
+  { token: "intoss://", pattern: /intoss:\/\//i },
+  { token: "intoss-private://", pattern: /intoss-private:\/\//i },
+  { token: "apps.tossmini.com", pattern: /apps\.tossmini\.com/i },
+  { token: "private-apps.tossmini.com", pattern: /private-apps\.tossmini\.com/i },
+];
 export type ReleaseTarget = "google_play" | "apps_in_toss";
 
 const GOOGLE_PLAY_FORBIDDEN_TOSS_TOKENS = [
@@ -83,26 +104,69 @@ export function scanReleaseBoundary(files: SourceFileForScan[]): ReleaseBoundary
   const violations: ReleaseBoundaryViolation[] = [];
   for (const file of files) {
     if (isGameCode(file.path)) {
+      const imports = moduleSpecifiers(file);
       for (const token of FORBIDDEN_GAME_IMPORTS) {
-        if (file.content.includes(token)) {
+        if (imports.some((specifier) => specifier.toLowerCase().includes(token))) {
           violations.push({ path: file.path, reason: "forbidden_import_in_game_code", token });
         }
       }
     }
     if (isClientCode(file.path)) {
+      scanPlatformSdkBoundary(file, violations);
       for (const token of SERVER_SECRET_TOKENS) {
         if (file.content.includes(token)) {
           violations.push({ path: file.path, reason: "server_secret_in_client_code", token });
         }
       }
       for (const token of RAW_IDENTITY_TOKENS) {
-        if (file.content.includes(token)) {
+        if (file.content.includes(token) && !isTransientInviteContract(file, token)) {
           violations.push({ path: file.path, reason: "raw_identity_in_client_code", token });
         }
       }
     }
   }
   return { ok: violations.length === 0, violations };
+}
+
+// Inspect actual module access, not provider labels or comments in product UI.
+function moduleSpecifiers(file: SourceFileForScan): string[] {
+  const source = ts.createSourceFile(file.path, file.content, ts.ScriptTarget.Latest, true);
+  const specifiers: string[] = [];
+  const add = (node: ts.Node | undefined): void => {
+    if (node && ts.isStringLiteralLike(node)) specifiers.push(node.text);
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) add(node.moduleSpecifier);
+    if (ts.isExternalModuleReference(node)) add(node.expression);
+    if (ts.isCallExpression(node) && (
+      node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+      (ts.isIdentifier(node.expression) && node.expression.text === "require")
+    )) add(node.arguments[0]);
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return specifiers;
+}
+
+function isTransientInviteContract(file: SourceFileForScan, token: string): boolean {
+  if (token !== "inviteCode") return false;
+  if (file.path !== "src/platform/share/ShareService.ts" &&
+      file.path !== "src/platform/apps-in-toss/AppsInTossShare.ts") return false;
+  // These two reviewed modules only forward an explicit share request. Adding any
+  // persistence/diagnostic transport requires re-review; no blanket directory exemption.
+  return !/\b(console|localStorage|sessionStorage|indexedDB|fetch|XMLHttpRequest|sendBeacon|analytics|telemetry|track|logger)\b/i.test(file.content);
+}
+
+function scanPlatformSdkBoundary(file: SourceFileForScan, violations: ReleaseBoundaryViolation[]): void {
+  const tokens = [
+    ...GOOGLE_PLAY_SDK_TOKENS.map((token) => ({ ...token, allowed: isGooglePlaySdkBoundary(file.path) })),
+    ...APPS_IN_TOSS_SDK_TOKENS.map((token) => ({ ...token, allowed: isAppsInTossSdkBoundary(file.path) })),
+  ];
+  for (const { token, pattern, allowed } of tokens) {
+    if (!allowed && pattern.test(file.content)) {
+      violations.push({ path: file.path, reason: "platform_sdk_in_wrong_boundary", token });
+    }
+  }
 }
 
 export function scanProductionBundleForDevQaTokens(files: SourceFileForScan[]): ReleaseBoundaryResult {
@@ -152,7 +216,17 @@ function isClientCode(path: string): boolean {
   return path.startsWith("src/");
 }
 
+function isGooglePlaySdkBoundary(path: string): boolean {
+  return path.startsWith("src/platform/google-play/");
+}
+
+function isAppsInTossSdkBoundary(path: string): boolean {
+  return path === "src/platform/AppsInTossAdapter.ts" || path.startsWith("src/platform/apps-in-toss/");
+}
+
 function isAllowedPlatformSpecificFile(path: string, target: ReleaseTarget): boolean {
-  if (target === "google_play") return path === "src/platform/AppsInTossAdapter.ts";
-  return path === "src/platform/GooglePlayAdapter.ts";
+  if (target === "google_play") {
+    return path === "src/platform/AppsInTossAdapter.ts" || path.startsWith("src/platform/apps-in-toss/");
+  }
+  return path === "src/platform/GooglePlayAdapter.ts" || path.startsWith("src/platform/google-play/");
 }

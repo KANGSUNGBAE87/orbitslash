@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const EVENT_NAMES = [
   "spawn",
@@ -137,7 +138,7 @@ Deno.serve(async (request) => {
 });
 
 async function bindEventsToCoreUsers(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   events: GameplayTelemetryPayload[],
   authCoreUserId: string | null,
 ): Promise<{ ok: true; rows: Array<{ event: GameplayTelemetryPayload; coreUserId: string | null }> } | { ok: false; reason: string }> {
@@ -219,7 +220,7 @@ function containsSensitiveKey(value: unknown): boolean {
 }
 
 async function resolveCoreUserId(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   supabaseUrl: string,
   authorizationHeader: string | null,
 ): Promise<string | null> {

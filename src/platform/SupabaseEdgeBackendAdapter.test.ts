@@ -1,8 +1,89 @@
 import { describe, expect, it, vi } from "vitest";
 import { createRunSummary } from "../game/RankingSystem";
 import { SupabaseEdgeBackendAdapter } from "./SupabaseEdgeBackendAdapter";
+import { RANKED_CORE_RULES_HASH, RANKED_CORE_SCHEMA_VERSION } from "../../shared/ranked-core";
 
 describe("SupabaseEdgeBackendAdapter", () => {
+  it("routes only the pinned contract and opaque token through the friend challenge Edge boundary", async () => {
+    const calls: Array<{ input: string; body: Record<string, unknown> }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      calls.push({ input: String(input), body });
+      if (body.action === "create") return new Response(JSON.stringify({ ok: true, challengeId: "challenge-1", token: "osc1_server_random", created: true }), { status: 200 });
+      if (body.action === "list") return new Response(JSON.stringify({ ok: true, challenges: [{
+        id: "challenge-1", seed: 34199, difficulty: "elite", rulesHash: "rules-1", rulesVersion: 4,
+        configVersion: "config-1", expiresAt: "2026-08-01T00:00:00.000Z", status: "open",
+      }] }), { status: 200 });
+      return new Response(JSON.stringify({ ok: true, accepted: true, result: { score: 900, survivalMs: 60_000, kills: 20, maxCombo: 4, verifiedAt: "2026-07-11T00:00:00.000Z" } }), { status: 200 });
+    });
+    const adapter = new SupabaseEdgeBackendAdapter("https://example.functions/orbitslash-ranked-run", "anon-key", fetchMock as unknown as typeof fetch, {
+      friendChallengeEndpointUrl: "https://example.functions/orbitslash-friend-challenge",
+      friendChallengeRemoteEnabled: true,
+      liveOpsEvidenceVerified: true,
+    });
+    const contract = { seed: 34199, difficulty: "elite", rulesHash: "rules-1", rulesVersion: 4, configVersion: "config-1", expiresAt: "2026-08-01T00:00:00.000Z" };
+
+    await expect(adapter.createFriendChallenge(contract)).resolves.toEqual({ accepted: true, challengeId: "challenge-1", token: "osc1_server_random" });
+    await expect(adapter.listFriendChallenges()).resolves.toEqual({
+      available: true,
+      challenges: [{ id: "challenge-1", ...contract, status: "open" }],
+    });
+    await expect(adapter.acceptFriendChallenge("osc1_server_random", "server-ranked-run")).resolves.toEqual({
+      accepted: true,
+      result: { score: 900, survivalMs: 60_000, kills: 20, maxCombo: 4, verifiedAt: "2026-07-11T00:00:00.000Z" },
+    });
+
+    expect(calls).toEqual([
+      { input: "https://example.functions/orbitslash-friend-challenge", body: { action: "create", ...contract } },
+      { input: "https://example.functions/orbitslash-friend-challenge", body: { action: "list" } },
+      { input: "https://example.functions/orbitslash-friend-challenge", body: { action: "accept", token: "osc1_server_random", runToken: "server-ranked-run" } },
+    ]);
+    expect(JSON.stringify(calls)).not.toMatch(/providerUserId|friendList|userKey/);
+  });
+
+  it("keeps friend challenge calls closed until both remote and liveops evidence flags are explicit", async () => {
+    const fetchMock = vi.fn() as unknown as typeof fetch;
+    const adapter = new SupabaseEdgeBackendAdapter("https://example.functions/orbitslash-ranked-run", "anon-key", fetchMock, {
+      friendChallengeEndpointUrl: "https://example.functions/orbitslash-friend-challenge",
+      friendChallengeRemoteEnabled: true,
+      liveOpsEvidenceVerified: false,
+    });
+
+    await expect(adapter.createFriendChallenge({ seed: 1, difficulty: "rookie", rulesHash: "rules-1", rulesVersion: 1, configVersion: "config-1", expiresAt: "2026-08-01T00:00:00.000Z" })).resolves.toEqual({
+      accepted: false,
+      reason: "friend_challenge_remote_not_enabled",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("posts allowlisted product telemetry only to its dedicated enabled endpoint", async () => {
+    const calls: Array<{ input: string; body: unknown }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ input: String(input), body: JSON.parse(String(init?.body)) });
+      return new Response(JSON.stringify({ ok: true, accepted: true }), { status: 200 });
+    });
+    const adapter = new SupabaseEdgeBackendAdapter("https://example.functions/orbitslash-ranked-run", "anon-key", fetchMock as unknown as typeof fetch, {
+      productTelemetryEndpointUrl: "https://example.functions/orbitslash-product-telemetry",
+      productTelemetryRemoteEnabled: true,
+    });
+
+    await expect(adapter.recordProductEvent({
+      clientEventId: "trace:1",
+      sessionTraceId: "trace",
+      eventName: "primary_start",
+      eventSequence: 1,
+      props: { modeId: "story", freeText: "must-not-send" } as never,
+    }, { runtime: "web_stub" })).resolves.toEqual({ accepted: true });
+
+    expect(calls).toEqual([{
+      input: "https://example.functions/orbitslash-product-telemetry",
+      body: expect.objectContaining({
+        action: "record",
+        events: [expect.objectContaining({ eventName: "primary_start", props: { modeId: "story" }, runtime: "web_stub" })],
+      }),
+    }]);
+  });
+
   it("begins ranked runs through the Edge Function with public anon auth only", async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       expect(init?.headers).toMatchObject({
@@ -10,7 +91,12 @@ describe("SupabaseEdgeBackendAdapter", () => {
         apikey: "anon-key",
         Authorization: "Bearer anon-key",
       });
-      expect(JSON.parse(String(init?.body))).toEqual({ action: "begin", difficulty: "rookie" });
+      expect(JSON.parse(String(init?.body))).toEqual({
+        action: "begin",
+        difficulty: "rookie",
+        rulesHash: RANKED_CORE_RULES_HASH,
+        rulesVersion: RANKED_CORE_SCHEMA_VERSION,
+      });
       return new Response(
         JSON.stringify({
           ok: true,
@@ -20,6 +106,8 @@ describe("SupabaseEdgeBackendAdapter", () => {
             seed: 123,
             difficulty: "rookie",
             configVersion: "server-ranked-v1",
+            rulesHash: RANKED_CORE_RULES_HASH,
+            rulesVersion: RANKED_CORE_SCHEMA_VERSION,
             rankingEligible: true,
             verification: "server_verified",
             identityBound: true,
@@ -87,6 +175,8 @@ describe("SupabaseEdgeBackendAdapter", () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       expect(JSON.parse(String(init?.body))).toMatchObject({
         action: "submit",
+        rulesHash: RANKED_CORE_RULES_HASH,
+        rulesVersion: RANKED_CORE_SCHEMA_VERSION,
         replayTrace: {
           hitEvents: [{ spawnOrdinal: 1 }],
           killEvents: [{ spawnOrdinal: 1 }],
@@ -200,7 +290,7 @@ describe("SupabaseEdgeBackendAdapter", () => {
   it("loads public leaderboard rows only when the public leaderboard flag is explicit", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe("https://example.functions/orbitslash-ranked-run");
-      expect(JSON.parse(String(init?.body))).toEqual({ action: "leaderboard", limit: 10 });
+      expect(JSON.parse(String(init?.body))).toEqual({ action: "leaderboard", difficulty: "elite", weekKey: "orbitslash-ranked-v1:27", limit: 10 });
       return new Response(
         JSON.stringify({
           ok: true,
@@ -226,7 +316,7 @@ describe("SupabaseEdgeBackendAdapter", () => {
       publicLeaderboardEnabled: true,
     });
 
-    await expect(adapter.publicLeaderboardRows()).resolves.toEqual({
+    await expect(adapter.publicLeaderboardRows({ difficulty: "elite", weekKey: "orbitslash-ranked-v1:27", limit: 10 })).resolves.toEqual({
       status: { publicAvailable: true, reason: "ready" },
       rows: [
         {

@@ -103,4 +103,18 @@ describe("GameScene Phase 3 skill effects", () => {
     expect(scene.hitBurst.spawn).toHaveBeenNthCalledWith(2, 150, 240, t("special.penalty.energyCapsule"), 0xff5a66, 96, false, expect.any(Object));
     expect(scene.scoring.onMiss).toHaveBeenCalledTimes(1);
   });
+
+  it("adds an actual special-object benefit reward to every skill without merging balances", () => {
+    const scene = makeSceneStub();
+    scene.skillCharges.set("solar_lance", 10);
+    scene.skillCharges.set("nova_pulse", 40);
+    scene.energy = { heal: vi.fn(), visualState: vi.fn(() => "healthy") };
+    scene.scoring = { addBonus: vi.fn() };
+    scene.earth = { setVisualState: vi.fn() };
+
+    scene.applySpecialObjectEffect({ kind: "benefit", heal: 0, gauge: 12, score: 0, slowMs: 0 }, 100, 200, "energyCapsule");
+
+    expect(scene.skillCharges.get("solar_lance")).toBe(22);
+    expect(scene.skillCharges.get("nova_pulse")).toBe(52);
+  });
 });

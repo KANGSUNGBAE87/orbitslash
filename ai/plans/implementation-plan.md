@@ -1,21 +1,72 @@
 ---
-version: 0.2
-status: approved
-updated: 2026-06-28
+version: 1.8
+status: in_progress
+updated: 2026-09-19
 canonical: true
 ---
 
-# Orbit Slash — Implementation Plan (구현 기획문 v0.1)
+# Orbit Slash — Implementation Plan (다음 로컬 구현 준비)
 
-> Phase 1 (핵심 플레이 루프) 집중 구현 설계. product-plan §27 6단계 로드맵과
-> 모드/랭킹이 **무리한 재작업 없이 나중에 붙도록** 모듈 경계·시드·서버 검증 인터페이스를
-> 미리 확정한다. 이 문서는 **설계/아키텍처/인터페이스 스케치**만 담는다 — 실제 프로젝트
-> 스캐폴딩·npm/vite 실행·소스 파일 생성은 하지 않는다.
->
-> SSOT: 게임 규칙 = `ai/plans/product-plan.md`, 시각 규칙 = `ai/plans/design-plan.md`.
-> 충돌 시 두 SSOT가 우선하고, 본 문서는 그 구현 방법만 기술한다.
+> 2026-09-19 Owner 방향: 아직 출시하지 않는다. 현재 구현 상태를 정리하고 로컬 앱을
+> 확인한 뒤 다음 기능 보완을 선택한다. 아래 §0이 현재 작업 순서의 기준이다.
+> 7월 실행 계획과 Appendix A는 이미 구현된 작업의 근거이며 처음부터 재실행하지 않는다.
+> 제품 규칙은 `product-plan.md`, 시각 규칙은 `design-plan.md`가 기준이다.
 
 ## Change Log
+
+- 2026-09-19 (codex): v1.8 — Owner가 인용한 0~1단계 정리를 실행 승인.
+  기준선 535개 분류/534개 파일 백업, 공유 SDK 분리/취소 처리, 검사 규칙 통합/오탐 수정,
+  실제 저장소 회귀 검사, Node 24/Deno/CI 정합화, 기존 Edge 타입 오류 수정 완료.
+  136 files / 969 tests, typecheck, build, 전체 local preflight 통과. 원격/출시는 보류.
+
+- 2026-09-19 (codex): v1.7 — Owner 요청에 따라 출시 우선 큐를 로컬 구현 준비로 변경.
+  기존 구현/미연결/검증 대기를 분리하고 다음 작업의 파일 범위·완료 기준을 정리했다.
+  이번 변경은 문서 정리와 로컬 앱 실행이며 게임 코드 수정은 포함하지 않는다.
+
+- 2026-07-19 (codex): v1.6 BGM tone refinement — `Orbit Siege`의 1박 4-step 긴박감은
+  유지하면서 arp 최고음을 B3로 낮추고 triangle-like 홀수 배음, 완만한 attack,
+  `0.072` gain으로 교체했다. continuous E drone과 느린 warning beacon을 제거하고
+  작은 metallic shimmer는 유지했다. 새 120초 AAC/M4A와 tone contract 3 tests,
+  전체 135 test files / 956 tests, typecheck, build, asset budget 통과.
+
+- 2026-07-18 (codex): v1.5 local complete — 원본 120초 `Orbit Siege` AAC/M4A를 생성해
+  첫 진입 자동재생 시도, 최초 제스처 복구, 반복, BGM 설정과 lifecycle pause/resume에
+  연결했다. Home 우측 상단 기어와 카드형 설정, IdentityService 단일 계정 상태,
+  Apps in Toss → native share → clipboard 공유 경계, 초대 코드 준비 중 표시를 통합했다.
+  설정 연속 저장, init/dispose, autoplay rejection 회귀를 보강했다. 135 test files / 956
+  tests, typecheck, build, asset budget, Google Play shell, 360/390/430px 브라우저 QA 통과.
+  Apps in Toss shell은 현재 로컬 Node 22라 Node 24 환경 검증이 별도 pending이다.
+
+- 2026-07-18 (codex): v1.4 local complete — 스킬 5종 충전/쿨타임을 슬롯별로 완전
+  분리하고 HUD 충전·쿨타임 이중 링을 연결했다. Ranked client/Edge도 동일 계약과 전역
+  event sequence로 강화했다. Guided Story는 1HP 목표 cohort, 무피해 재시도, Solar
+  실패 환불, wave/boss/special backlog 지연까지 적용했다. 135 test files / 941 tests,
+  typecheck, build, Edge generated sync, 360/390/430px 브라우저 QA 통과. 실제 터치 기기와
+  원격 서비스/스토어 증거는 기존처럼 별도 pending.
+
+- 2026-07-18 (codex): v1.3 plan approved — Owner 피드백으로 기존 공용 스킬 게이지 규칙을
+  스킬별 독립 충전으로 교체한다. 사용한 슬롯만 충전값 0과 개별 쿨타임으로 전환하고,
+  HUD는 바깥 청록 충전 링과 안쪽 주황 쿨타임 링을 동시에 표시한다. Guided Story 첫
+  Last Save 유성의 0.3초 즉시 충돌·에너지 5 피해·미재생성 소프트락도 같은 회귀 수정에
+  포함한다. 실행 계획은
+  `docs/superpowers/plans/2026-07-18-independent-skill-charge-and-guided-meteor.md`.
+
+- 2026-07-18 (codex): v1.2 UX completion pass — 스킬 쿨타임을 슬롯별로 격리하고,
+  Home primary CTA를 첫 훈련/이어하기/모드 선택 상태에 맞게 연결. 결과창을 통계·상세·
+  해금 카드·우선 CTA 구조로 교체하고 Nova Pulse의 정확한 바깥 플릭 안내, 공통 제스처
+  아이콘, 실패 이유 피드백, config fallback SSOT를 게임/HUD/해금 카드에 통합. 로컬
+  360/390/430px 화면 QA와 전체 test/build를 통과했으며 실제 터치 기기 감도 조정은 남음.
+
+- 2026-07-11 (codex): v1.1 implementation reconciliation — actual game-path audit findings를
+  반영해 Ranked 서비스 미준비 시 local practice 전환, Guided Story resume/scenario,
+  결과 순차 reveal, KST weekly claim, return telemetry, runtime BGM, safe-area mode detail,
+  cloud merge, special/skill asset preloading을 연결. 로컬 검증은 통과했지만 remote/device/
+  store evidence gate는 아직 미완료.
+
+- 2026-07-11 (codex): v1.0 proposed — 현재 구현/모바일 화면/상품성 감사의 권장 순서
+  1~5를 Claude CLI first-party, Gemini 3.1 Pro, Codex/CMM 의견으로 재검토하고 제품 완성
+  실행 DAG, module boundaries, TDD task plan, cloud/ranked/platform gates를 추가. 기존 v0.2
+  Phase 1 설계는 이미 구현된 구조의 역사적 참조로 Appendix A에 보존.
 
 - 2026-06-28 (claude): Phase 1 구현 기획문 v0.1 최초 작성. 모듈 경계, 데이터 주도
   밸런스, 핵심 인터페이스 스케치, 게임 루프, 테스트 전략, Apps in Toss WebView/백엔드/
@@ -31,7 +82,99 @@ canonical: true
 
 ---
 
-## 0. 범위 및 원칙
+## 0. 다음 로컬 구현 준비 계획 — 2026-09-19
+
+### 0.1 현재 목표와 작업 범위
+
+현재 플레이 가능한 버전을 성배님이 확인하고, 다음 기능 변경을 작은 단위로 진행할 수
+있도록 상태·기술 부채·검증 방법을 정리한다. 출시 준비는 현 단계의 완료 조건이 아니다.
+
+- 현재 완료: 기준선 보존, 공유/검사 복구, 개발 환경/CI 정합화, 문서 정리, 로컬 앱 실행.
+- 다음 구현 후보: 아래 A~D. 계획 등록은 각 코드 변경의 완료 또는 실행 승인을 뜻하지 않는다.
+- 후속 단계: 실제 로그인·원격 동기화·랭킹 개통·광고·결제·스토어 패키징.
+- 이번 승인 범위에 Node 24/Deno 설치와 CI 수정이 추가되었다. 원격 적용·배포·업로드·일괄 커밋은 제외한다.
+- 기존 미커밋 소스/아트/설정은 보존한다. 문서 정리를 위해 reset/삭제/자동 포맷하지 않는다.
+
+### 0.2 현재 구현 기준선
+
+| 구분 | 상태 |
+|---|---|
+| 로컬 제품 경로 구현 | 6모드, 5스킬 독립 충전/쿨타임, Guided Story, 결과/해금, 수집/메달/주간 보상, 설정/ko·en/BGM, pause/resume |
+| 추가 코드 연결 필요 | 실제 로그인 교환, 광고 SDK, 영수증 검증, 코스메틱 선택/렌더링, 시즌/친구 사용자 화면, AI 서버 경계 |
+| 로컬 서버 초안 | 진행 동기화, 제품 분석, 상품 권한, 친구 도전, 최신 랭킹 규칙/검증 |
+| 2026-09-19 원격 조회 | 기존 랭킹/게임 로그/광고 로그 함수 3개와 RLS-on 테이블 5개. 신규 원격 기능은 미배포 |
+| 최신 자동 검증 | Vitest 136 files / 969 tests, typecheck, build, generic/양 플랫폼 경계, asset/shell/generated sync, 7 Edge bundle/Deno check 통과 |
+| 검사 복구 | 공유 SDK/딥링크 전용 어댑터 분리, 실제 import AST 검사, 일시적 초대 전달 경계 한정, CLI/테스트 규칙 통합 완료 |
+| 수동 검증 | 7월 모바일 브라우저 QA 기록 존재. 현재 실기기 전체 QA 완료로 간주하지 않음 |
+
+### 0.3 실행 순서와 완료 기준
+
+| 단계 | 할 일 | 완료 기준 |
+|---|---|---|
+| 준비 — 이번 작업 | 상태표/로드맵/리뷰 정합화, 알려진 결함 기록, 로컬 앱 열기 | 다음 세션이 완료 작업을 반복하지 않고 실제 앱을 확인할 수 있음 |
+| A — 로컬 플레이 확인 | 홈→첫 훈련→결과→수집, 설정/언어/BGM, 모드 선택을 확인하고 사용자 피드백을 기록 | 재현 절차·기대 동작·영향 화면이 있는 우선순위 목록 |
+| B — 공통 정리 완료 | 공유/검사 분리, Node 24/Deno, CI preflight, 기존 Edge 타입 복구 | 전체 자동 검증 통과. AbortError 취소 시 추가 공유/복사 없이 idle 복귀 |
+| C — 피드백 기반 게임 보완 | 조작/HUD, 튜토리얼, 결과/보상, 모드 목표·밸런스 중 한 묶음씩 구현 | 관련 회귀 테스트와 실제 화면 재현 확인 통과 |
+| D — 다음 온라인 구현 준비 | 랭킹 보스 파편 계약 일치, 코스메틱/친구 연결 누락 목록, AI 비활성 경계 구체화 | 원격 서비스 없이 테스트 가능한 로컬 계약과 별도 외부 의존성 목록 |
+
+출시용 도구 설치나 서버 개통을 A~C의 선행 조건으로 삼지 않는다. 게임에 대한 피드백으로
+수정 우선순위가 정해지면 그 묶음을 먼저 진행한다. 모든 후보를 한 번에 구현하지 않는다.
+
+### 0.4 다음 작업별 파일 범위와 검증
+
+**A. 앱 확인 및 피드백**
+- 화면 경로: `src/game/GameApp.ts`, `src/render/AppShell.ts`.
+- 기록 위치: `ai/reviews/review.md`와 해당 날짜 actor 세션 로그.
+- 브라우저 저장 데이터를 임의 초기화하지 않는다. 새 사용자 재현은 별도 승인/분리된 QA 상태로 한다.
+- 정상 홈 진입, 화면 전환, 설정 저장, 최초 입력 이후 BGM, 일시정지/재개를 확인한다.
+
+**B. 공유·검사 경계 정리**
+- 공용 정책: `src/platform/share/ShareService.ts` 및 대응 테스트.
+- Toss 구현: `src/platform/apps-in-toss/`에 SDK/스킴 처리를 두고 공용 서비스에 port로 주입.
+- 검사: `src/platform/ReleaseBoundary.ts`, `scripts/check-release-boundary.mjs`, 대응 테스트.
+- UI 표시용 provider 문자열은 SDK import와 구분한다. `inviteCode` 검출은 실제 처리 경로를
+  검토하고, 원시 식별자·비밀값 차단 규칙을 무조건 예외 처리하지 않는다.
+- 검증: 공유 성공/취소/실패/clipboard fallback 회귀, 실제 소스 boundary scan,
+  `npm test`, `npm run typecheck`, `npm run build`.
+- Node 24.21.0/Deno 2.9.7로 전체 local preflight 통과. CI는 `.nvmrc`/`.deno-version`을 사용하고 PR에서도 검사한다. GitHub 실행 증거는 push 후 별도 확인해야 한다.
+
+**C. 화면·게임 보완 및 필요한 범위의 구조 정리**
+- 조작/HUD: `src/game/GameScene.ts`, `src/game/SkillSystem.ts`, `src/render/Hud.ts`.
+- 온보딩: `src/game/onboarding/`, 관련 GameScene 테스트.
+- 결과/수집: `src/render/view-models/`, `src/render/layout/`, `src/render/AppShell.ts`.
+- 밸런스: `src/data/`, `src/game/ModeConfig.ts`; 점수/랭킹 규칙 변경 시 shared ranked core도 확인.
+- GameScene/AppShell 전체 재작성은 하지 않는다. 선택한 수정이 닿는 책임만 기존 view-model,
+  layout, pure system 구조로 분리하고 동작 회귀를 검증한다.
+- ko/en 동시 반영. 관련 테스트 우선 실행 후 최종 전체 테스트/타입/빌드/화면 확인.
+
+**D. 로컬 계약의 미완성 지점**
+- Ranked: `GameScene.ts`, `shared/ranked-core/`, `RankedReplayValidator.ts`,
+  `supabase/functions/orbitslash-ranked-run/index.ts`. 정상 boss_shard trace의 서버 재현과
+  위조 이벤트 거절을 함께 검증한다. 우회 승인이나 보스 삭제를 기본 해법으로 삼지 않는다.
+- 코스메틱: `src/game/cosmetics/`, `src/platform/entitlements/`. 소유권 검증 모듈 존재와
+  실제 선택/렌더링 연결을 구분한다. 구매 성공을 가짜로 만들지 않는다.
+- AI: 문서에는 AI UX disabled이며 전용 실행 경계는 미구현이다. 다음 관련 기능 설계 시
+  서버 전용 어댑터/프록시와 비활성 구현을 구체화하고 클라이언트 키를 추가하지 않는다.
+
+### 0.5 후속 보류 목록 — 로컬 작업의 blocker 아님
+
+- JDK·Android SDK 준비, 실제 플랫폼 패키지 빌드. Node 24/Deno와 CI 검증 경로는 이번에 정리 완료.
+- Toss/Google 인증 교환, `core_users`/계정 연결/앱 멤버십, 원격 진행 동기화.
+- Supabase migration 차이 검토·적용, Edge 배포, 원격 제품 분석 및 실제 계정 QA.
+- 공개 랭킹, 실제 광고·결제, 시즌/친구 운영. 확장은 기존 제품 데이터 검증 기준을 유지.
+- Google Play → Apps in Toss 출시 순서는 유지하되 지금 출시 작업을 시작하지 않는다.
+
+### 0.6 문서·검증 운영
+
+- 이번 실행 증거: `ai/session-logs/2026-09-19-local-prep-cleanup-codex.md`. 이전 문서-only 정리는 `2026-09-19-next-implementation-prep-codex.md`.
+- 재현 명령/환경: `docs/local-development.md`. 백업과 변경 분류: `ai/reviews/local-baseline.md`.
+- 코드 변경은 별도 요청한 작업 묶음마다 재현/회귀 테스트 → 최소 구현 → 검증 순서로 진행.
+- 계획의 완료 체크는 코드 존재, 로컬 검증, 원격 실증을 각각 구분한다.
+- `ai/reviews/review.md`는 현재 결함/검증 기준, `master-roadmap.md`는 작업 순서 요약이다.
+
+---
+
+## Appendix A — Phase 1 Architecture Reference (v0.2, implemented baseline)
 
 ### 0.1 Phase 1 목표 (반드시 동작)
 product-plan §27.1 + §30:

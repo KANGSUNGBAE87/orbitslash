@@ -4,7 +4,11 @@ import { validateRunSubmission } from "../game/RankingSystem";
 import type { RankedReplayTrace } from "../game/RankedReplayTrace";
 import { resolveLeaderboardBoundary, type LeaderboardBoundaryState } from "./LeaderboardBoundary";
 import { validateRankedReplaySubmission } from "../game/RankedReplayValidator";
+import { CURRENT_RANKED_RULES_CONTRACT } from "../game/RankedRulesContract";
 import { RANKING_STRATEGY, type RankingStrategy } from "./RankingStrategy";
+import type { ProductTelemetryEvent } from "./ProductTelemetry";
+import type { PlatformTelemetryContext } from "./PlatformAdapter";
+import type { FriendChallengeContract } from "../game/liveops/FriendChallenge";
 
 export type RankedRunVerification = "local_stub" | "server_stub" | "server_verified";
 
@@ -14,6 +18,8 @@ export interface RankedRunStart {
   seed: number;
   difficulty: DifficultyId;
   configVersion?: string;
+  rulesHash?: string;
+  rulesVersion?: number;
   rankingEligible?: boolean;
   verification?: RankedRunVerification;
   identityBound?: boolean;
@@ -25,14 +31,56 @@ export interface BackendAdapter {
   beginRankedRun(difficulty: DifficultyId): Promise<RankedRunStart>;
   submitRankedRun(summary: RunSummary, replayTrace?: RankedReplayTrace): Promise<{ accepted: boolean; reason?: string }>;
   leaderboardStatus(): Promise<LeaderboardBoundaryState>;
-  publicLeaderboardRows(limit?: number): Promise<PublicLeaderboardResult>;
+  publicLeaderboardRows(query?: PublicLeaderboardQuery): Promise<PublicLeaderboardResult>;
   rewardedAdTelemetryStatus(): Promise<RewardedAdTelemetryStatus>;
   recordRewardedAdEvent(event: RewardedAdTelemetryEvent): Promise<{ accepted: boolean; reason?: string }>;
   gameplayTelemetryStatus(): Promise<GameplayTelemetryStatus>;
   recordGameplayEvent(event: GameplayTelemetryEvent): Promise<{ accepted: boolean; reason?: string }>;
+  productTelemetryStatus(): Promise<ProductTelemetryStatus>;
+  recordProductEvent(event: ProductTelemetryEvent, context: PlatformTelemetryContext): Promise<{ accepted: boolean; reason?: string }>;
+  createFriendChallenge(contract: FriendChallengeContract): Promise<FriendChallengeCreateResult>;
+  listFriendChallenges(): Promise<FriendChallengeListResult>;
+  acceptFriendChallenge(token: string, runToken: string): Promise<FriendChallengeAcceptResult>;
   trackEvent(event: string, props?: Record<string, unknown>): Promise<void>;
   fetchRemoteConfigVersion(): Promise<string>;
   rankingStrategy(): RankingStrategy;
+}
+
+export type FriendChallengeStatus = "open" | "accepted" | "expired";
+
+export interface FriendChallengeResultMetadata {
+  score: number;
+  survivalMs: number;
+  kills: number;
+  maxCombo: number;
+  verifiedAt: string;
+}
+
+export interface FriendChallengeListItem extends FriendChallengeContract {
+  id: string;
+  status: FriendChallengeStatus;
+  acceptedAt?: string;
+  result?: FriendChallengeResultMetadata;
+}
+
+export interface FriendChallengeCreateResult {
+  accepted: boolean;
+  challengeId?: string;
+  /** Returned once by the Edge create response; never persisted client-side by this adapter. */
+  token?: string;
+  reason?: string;
+}
+
+export interface FriendChallengeListResult {
+  available: boolean;
+  challenges: FriendChallengeListItem[];
+  reason?: string;
+}
+
+export interface FriendChallengeAcceptResult {
+  accepted: boolean;
+  result?: FriendChallengeResultMetadata;
+  reason?: string;
 }
 
 export type RewardedAdTelemetryEventName =
@@ -57,6 +105,12 @@ export interface PublicLeaderboardRow {
   createdAt: string;
 }
 
+export interface PublicLeaderboardQuery {
+  difficulty: DifficultyId;
+  weekKey: string;
+  limit?: number;
+}
+
 export interface PublicLeaderboardResult {
   status: LeaderboardBoundaryState;
   rows: PublicLeaderboardRow[];
@@ -77,6 +131,16 @@ export type GameplayTelemetryStatusReason = "local_stub" | "endpoint_not_configu
 export interface GameplayTelemetryStatus {
   ready: boolean;
   reason: GameplayTelemetryStatusReason;
+  endpointConfigured: boolean;
+  remoteEnabled: boolean;
+  remoteVerified?: boolean;
+}
+
+export type ProductTelemetryStatusReason = "local_stub" | "endpoint_not_configured" | "remote_not_enabled" | "remote_unverified" | "ready";
+
+export interface ProductTelemetryStatus {
+  ready: boolean;
+  reason: ProductTelemetryStatusReason;
   endpointConfigured: boolean;
   remoteEnabled: boolean;
   remoteVerified?: boolean;
@@ -187,6 +251,7 @@ export type PublicRankedSubmissionValidationReason =
   | "count_not_integer"
   | "skill_use_negative"
   | "invalid_seed"
+  | "ranked_rules_mismatch"
   | "replay_not_ranked"
   | "replay_invalid_difficulty"
   | "replay_invalid_survival"
@@ -195,6 +260,7 @@ export type PublicRankedSubmissionValidationReason =
   | "replay_last_save_exceeds_kills"
   | "replay_score_exceeds_bound"
   | "replay_skill_use_exceeds_bound"
+  | "replay_skill_timeline_invalid"
   | "replay_trace_missing"
   | "replay_trace_invalid_time"
   | "replay_trace_unknown_spawn"
@@ -217,8 +283,21 @@ const RANKED_WEEK_START_EPOCH_MS = Date.UTC(2026, 0, 4, 21, 0, 0); // 2026-01-05
 
 export function createRankedWeeklySeed(difficulty: DifficultyId, now: Date | number = Date.now()): number {
   const nowMs = now instanceof Date ? now.getTime() : now;
-  const weekIndex = Math.floor((nowMs - RANKED_WEEK_START_EPOCH_MS) / RANKED_WEEK_MS);
+  const weekIndex = rankedWeekIndex(nowMs);
   return hashRankedSeed(`orbitslash-ranked-v1:${weekIndex}:${difficulty}`);
+}
+
+export function createRankedWeekKey(now: Date | number = Date.now()): string {
+  const nowMs = now instanceof Date ? now.getTime() : now;
+  return `orbitslash-ranked-v1:${rankedWeekIndex(nowMs)}`;
+}
+
+export function currentPublicLeaderboardQuery(difficulty: DifficultyId = "rookie", now: Date | number = Date.now()): PublicLeaderboardQuery {
+  return { difficulty, weekKey: createRankedWeekKey(now), limit: 10 };
+}
+
+function rankedWeekIndex(nowMs: number): number {
+  return Math.floor((nowMs - RANKED_WEEK_START_EPOCH_MS) / RANKED_WEEK_MS);
 }
 
 function hashRankedSeed(input: string): number {
@@ -236,6 +315,7 @@ export function createLocalRunStart(difficulty: DifficultyId, seed = Date.now() 
     runToken: `local-${seed}`,
     seed,
     difficulty,
+    ...CURRENT_RANKED_RULES_CONTRACT,
     rankingEligible: false,
     verification: "local_stub",
   };
@@ -248,6 +328,7 @@ export function createRankedServerStubStart(difficulty: DifficultyId, seed: numb
     seed,
     difficulty,
     configVersion,
+    ...CURRENT_RANKED_RULES_CONTRACT,
     rankingEligible: false,
     verification: "server_stub",
   };
@@ -268,6 +349,7 @@ export function createServerVerifiedRankedStart(params: {
     seed: params.seed,
     difficulty: params.difficulty,
     configVersion: params.configVersion,
+    ...CURRENT_RANKED_RULES_CONTRACT,
     rankingEligible: true,
     verification: "server_verified",
     identityBound: params.identityBound ?? true,
@@ -308,7 +390,10 @@ export function validatePublicRankedSubmission(
   if (summary.runToken !== start.runToken) return { ok: false, reason: "run_token_mismatch" };
   if (summary.seed !== start.seed) return { ok: false, reason: "seed_mismatch" };
   if (summary.difficulty !== start.difficulty) return { ok: false, reason: "difficulty_mismatch" };
-  const replayValidation = validateRankedReplaySubmission(summary, replayTrace);
+  const replayValidation = validateRankedReplaySubmission(summary, replayTrace, undefined, undefined, {
+    rulesHash: start.rulesHash,
+    rulesVersion: start.rulesVersion,
+  });
   if (!replayValidation.ok) return { ok: false, reason: replayValidation.reason };
   return { ok: true };
 }
@@ -332,7 +417,7 @@ export class LocalBackendAdapter implements BackendAdapter {
     return resolveLeaderboardBoundary();
   }
 
-  async publicLeaderboardRows(_limit = 10): Promise<PublicLeaderboardResult> {
+  async publicLeaderboardRows(_query: PublicLeaderboardQuery = currentPublicLeaderboardQuery()): Promise<PublicLeaderboardResult> {
     return {
       status: resolveLeaderboardBoundary(),
       rows: [],
@@ -365,6 +450,26 @@ export class LocalBackendAdapter implements BackendAdapter {
 
   async recordGameplayEvent(_event: GameplayTelemetryEvent): Promise<{ accepted: boolean; reason?: string }> {
     return { accepted: false, reason: "telemetry_not_configured" };
+  }
+
+  async productTelemetryStatus(): Promise<ProductTelemetryStatus> {
+    return { ready: false, reason: "local_stub", endpointConfigured: false, remoteEnabled: false, remoteVerified: false };
+  }
+
+  async recordProductEvent(_event: ProductTelemetryEvent, _context: PlatformTelemetryContext): Promise<{ accepted: boolean; reason?: string }> {
+    return { accepted: false, reason: "telemetry_not_configured" };
+  }
+
+  async createFriendChallenge(_contract: FriendChallengeContract): Promise<FriendChallengeCreateResult> {
+    return { accepted: false, reason: "friend_challenge_not_configured" };
+  }
+
+  async listFriendChallenges(): Promise<FriendChallengeListResult> {
+    return { available: false, challenges: [], reason: "friend_challenge_not_configured" };
+  }
+
+  async acceptFriendChallenge(_token: string, _runToken: string): Promise<FriendChallengeAcceptResult> {
+    return { accepted: false, reason: "friend_challenge_not_configured" };
   }
 
   async trackEvent(_event: string, _props?: Record<string, unknown>): Promise<void> {

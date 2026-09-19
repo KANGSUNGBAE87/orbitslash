@@ -1,0 +1,40 @@
+{
+  "stages": {
+    "story-1": { "silverScore": 900, "goldScore": 1800, "goldEnergy": 50, "goldCombo": 5 },
+    "story-2": { "silverScore": 900, "goldScore": 1800, "goldEnergy": 50, "goldCombo": 5 },
+    "story-3": { "silverScore": 900, "goldScore": 1800, "goldEnergy": 50, "goldCombo": 5 },
+    "story-4": { "silverScore": 900, "goldScore": 1800, "goldEnergy": 50, "goldCombo": 5 },
+    "story-5": { "silverScore": 1000, "goldScore": 2000, "goldEnergy": 50, "goldCombo": 6 },
+    "story-6": { "silverScore": 1000, "goldScore": 2000, "goldEnergy": 50, "goldCombo": 6 },
+    "story-7": { "silverScore": 1000, "goldScore": 2000, "goldEnergy": 50, "goldCombo": 6 },
+    "story-8": { "silverScore": 1000, "goldScore": 2000, "goldEnergy": 50, "goldCombo": 6 },
+    "story-9": { "silverScore": 1100, "goldScore": 2200, "goldEnergy": 55, "goldCombo": 6 },
+    "story-10": { "silverScore": 1100, "goldScore": 2200, "goldEnergy": 55, "goldCombo": 6 },
+    "story-11": { "silverScore": 1100, "goldScore": 2200, "goldEnergy": 55, "goldCombo": 6 },
+    "story-12": { "silverScore": 1100, "goldScore": 2200, "goldEnergy": 55, "goldCombo": 6 },
+    "story-13": { "silverScore": 1200, "goldScore": 2400, "goldEnergy": 55, "goldCombo": 7 },
+    "story-14": { "silverScore": 1200, "goldScore": 2400, "goldEnergy": 55, "goldCombo": 7 },
+    "story-15": { "silverScore": 1200, "goldScore": 2400, "goldEnergy": 55, "goldCombo": 7 },
+    "story-16": { "silverScore": 1200, "goldScore": 2400, "goldEnergy": 55, "goldCombo": 7 },
+    "story-17": { "silverScore": 1300, "goldScore": 2600, "goldEnergy": 60, "goldCombo": 8 },
+    "story-18": { "silverScore": 1300, "goldScore": 2600, "goldEnergy": 60, "goldCombo": 8 },
+    "story-19": { "silverScore": 1300, "goldScore": 2600, "goldEnergy": 60, "goldCombo": 8 },
+    "story-20": { "silverScore": 1300, "goldScore": 2600, "goldEnergy": 60, "goldCombo": 8 },
+    "story-21": { "silverScore": 1400, "goldScore": 2800, "goldEnergy": 60, "goldCombo": 9 },
+    "story-22": { "silverScore": 1400, "goldScore": 2800, "goldEnergy": 60, "goldCombo": 9 },
+    "story-23": { "silverScore": 1400, "goldScore": 2800, "goldEnergy": 60, "goldCombo": 9 },
+    "story-24": { "silverScore": 1400, "goldScore": 2800, "goldEnergy": 60, "goldCombo": 9 },
+    "story-25": { "silverScore": 1500, "goldScore": 3000, "goldEnergy": 65, "goldCombo": 10 },
+    "story-26": { "silverScore": 1500, "goldScore": 3000, "goldEnergy": 65, "goldCombo": 10 },
+    "story-27": { "silverScore": 1500, "goldScore": 3000, "goldEnergy": 65, "goldCombo": 10 },
+    "story-28": { "silverScore": 1500, "goldScore": 3000, "goldEnergy": 65, "goldCombo": 10 },
+    "story-29": { "silverScore": 1600, "goldScore": 3200, "goldEnergy": 65, "goldCombo": 12 },
+    "story-30": { "silverScore": 1600, "goldScore": 3200, "goldEnergy": 65, "goldCombo": 12 },
+    "story-31": { "silverScore": 1600, "goldScore": 3200, "goldEnergy": 65, "goldCombo": 12 },
+    "story-32": { "silverScore": 1600, "goldScore": 3200, "goldEnergy": 65, "goldCombo": 12 }
+  },
+  "weekly": {
+    "requiredDistinctClearDays": 5,
+    "titleId": "weekly_five_day"
+  }
+}

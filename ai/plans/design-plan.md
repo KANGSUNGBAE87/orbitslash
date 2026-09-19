@@ -1,7 +1,7 @@
 ---
-version: 1.1
+version: 1.5
 status: approved
-updated: 2026-06-28
+updated: 2026-07-18
 canonical: true
 ---
 
@@ -13,6 +13,14 @@ canonical: true
 
 ## Change Log
 
+- 2026-07-18 (codex): v1.5 — Home 하단 설정 버튼을 제거하고 우측 상단 safe-area 안에
+  Pixi Graphics 기어 버튼을 배치했다. 설정은 계정, 감각 설정, 언어, 공유를 분리한
+  딥 네이비 카드 패널로 구성하며 시안/앰버 강조색과 48 CSS px 최소 터치 영역을 유지한다.
+  초대 코드 공유는 준비 중으로 표시하고 실제 수신 계약 전까지 활성화하지 않는다.
+- 2026-07-18 (codex): v1.4 — 스킬 버튼 시각 계약 확정. 바깥 청록 링은 슬롯별 충전율과
+  퍼센트, 안쪽 주황 링은 해당 슬롯의 활성 쿨타임만 표시한다. 준비 완료는 골드,
+  잠금은 dim을 유지한다. Guided Story scripted step은 wave HUD를 숨기고 목표 유성·
+  튜토리얼 문구·에너지 상태만 우선 노출한다.
 - 2026-06-28 (claude): 디자인 기획문 v1.1 등록 + design_sample 19장 시각 확인·카탈로그화.
 - 2026-06-28 (claude): v1.2 — Owner 지시로 게임 화면 지구 크기 기존 1/3 축소
   (body 300→100, shield 420→140, Last Save 링 520→174). §2.2/§2.3 갱신. 코드 coords.ts 동기화.

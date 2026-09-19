@@ -1,13 +1,16 @@
 ---
-version: 0.7
+version: 0.8
 status: draft
-updated: 2026-07-06
+updated: 2026-09-19
 canonical: true
 ---
 
 # Orbit Slash — Platform Release Checklist
 
 ## Change Log
+
+- 2026-09-19 (codex): Local-preparation cleanup passed all automated gates; store release remains
+  deferred. Historical July remote evidence below is not a claim about current local sources.
 
 - 2026-06-28 (codex): Added draft release readiness checklist for Apps in Toss and Google Play paths.
 - 2026-06-28 (codex): Updated after hybrid ranking decision, dormant Supabase schema work, asset sprite pass, QA presets, and release hardening. Current remote state still needs re-verification before release evidence use.
@@ -67,7 +70,15 @@ canonical: true
   remains intentionally disabled and identity-bound ranked submission QA remains
   pending.
 
-## Release Target Status
+## Current status — 2026-09-19
+
+No deployment/store release requested. Local tests (969), typecheck/build, three source boundary
+scans, shell/assets/generated checks, seven Edge bundles and seven Deno type checks passed.
+CI configuration now uses Node 24 and pinned Deno; actual GitHub execution awaits a future push.
+Current feature/remote/device matrix: `review.md`; reproducible commands: `../../docs/local-development.md`.
+The following July release history is retained for reference, not current launch approval.
+
+## Historical Release Target Status — July 2026
 
 - Current implementation target: GitHub Pages playable build plus remote backend
   smoke-ready release-candidate backend.
