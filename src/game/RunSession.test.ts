@@ -69,7 +69,6 @@ describe("RunSession", () => {
 
   it("records replay trace snapshots without exposing internal arrays", () => {
     const session = new RunSession({ difficulty: "rookie", runToken: "server-ranked-run-42", seed: 42 });
-    session.recordSkillUse("solar_lance", 120);
     session.recordSpawn({
       spawnOrdinal: 1,
       source: "wave",
@@ -80,8 +79,9 @@ describe("RunSession", () => {
       angularSpeed: 0.4,
       approachSpeed: 80,
     });
-    session.recordHit({ spawnOrdinal: 1, hitAtMs: 200, band: "outer", accuracy: "normal", damage: 1 });
+    const hitSequence = session.recordHit({ spawnOrdinal: 1, hitAtMs: 200, band: "outer", accuracy: "normal", damage: 1 });
     session.recordKill({ spawnOrdinal: 1, hitAtMs: 200, band: "outer", accuracy: "normal" });
+    const skillSequence = session.recordSkillUse("solar_lance", 200);
     session.recordComboBreak("miss", 300);
 
     const snapshot = session.replayTraceSnapshot();
@@ -111,11 +111,53 @@ describe("RunSession", () => {
           approachSpeed: 80,
         },
       ],
-      hitEvents: [{ spawnOrdinal: 1, hitAtMs: 200, band: "outer", accuracy: "normal", damage: 1 }],
-      killEvents: [{ spawnOrdinal: 1, hitAtMs: 200, band: "outer", accuracy: "normal" }],
+      hitEvents: [{ spawnOrdinal: 1, hitAtMs: 200, band: "outer", accuracy: "normal", damage: 1, eventSequence: 1 }],
+      killEvents: [{ spawnOrdinal: 1, hitAtMs: 200, band: "outer", accuracy: "normal", eventSequence: 1 }],
       comboBreakEvents: [{ reason: "miss", atMs: 300 }],
-      skillEvents: [{ skillId: "solar_lance", atMs: 120 }],
+      skillEvents: [{ skillId: "solar_lance", atMs: 200, eventSequence: 2 }],
     });
+    expect(hitSequence).toBe(1);
+    expect(skillSequence).toBe(2);
+  });
+
+  it("assigns one positive global sequence to each semantic skill or hit and lets the kill reuse its final hit sequence", () => {
+    const session = new RunSession({ difficulty: "rookie", runToken: "server-ranked-run-sequence", seed: 42 });
+
+    const firstHitSequence = session.recordHit({ spawnOrdinal: 1, hitAtMs: 100, band: "outer", accuracy: "normal", damage: 1 });
+    const skillSequence = session.recordSkillUse("solar_lance", 100);
+    const finalHitSequence = session.recordHit({ spawnOrdinal: 2, hitAtMs: 100, band: "outer", accuracy: "normal", damage: 1 });
+    session.recordKill({ spawnOrdinal: 2, hitAtMs: 100, band: "outer", accuracy: "normal" });
+
+    expect([firstHitSequence, skillSequence, finalHitSequence]).toEqual([1, 2, 3]);
+    expect(session.replayTraceSnapshot()).toMatchObject({
+      hitEvents: [{ eventSequence: 1 }, { eventSequence: 3 }],
+      skillEvents: [{ eventSequence: 2 }],
+      killEvents: [{ eventSequence: 3 }],
+    });
+  });
+
+  it("rejects a direct replay kill that has no preceding hit instead of creating a partial sequence trace", () => {
+    const session = new RunSession({ difficulty: "rookie", runToken: "server-ranked-run-direct-kill", seed: 42 });
+
+    expect(() => session.recordKill({
+      spawnOrdinal: 1,
+      hitAtMs: 100,
+      band: "outer",
+      accuracy: "normal",
+    })).toThrow(/recorded hit/i);
+    expect(session.replayTraceSnapshot().killEvents).toEqual([]);
+  });
+
+  it("ignores a caller-supplied kill sequence and binds the kill to the latest hit for that spawn", () => {
+    const session = new RunSession({ difficulty: "rookie", runToken: "server-ranked-run-forged-kill-sequence", seed: 42 });
+    session.recordHit({ spawnOrdinal: 1, hitAtMs: 100, band: "outer", accuracy: "normal", damage: 1 });
+
+    session.recordKill(Object.assign(
+      { spawnOrdinal: 1, hitAtMs: 100, band: "outer" as const, accuracy: "normal" as const },
+      { eventSequence: 999 },
+    ));
+
+    expect(session.replayTraceSnapshot().killEvents[0]!.eventSequence).toBe(1);
   });
 
   it("deep-copies replay kill segments in snapshots", () => {
@@ -151,5 +193,8 @@ describe("RunSession", () => {
 
     expect(session.replayTraceSnapshot().hitEvents[0]!.segment!.a.x).toBe(10);
     expect(session.replayTraceSnapshot().killEvents[0]!.segment!.a.x).toBe(10);
+    expect(session.replayTraceSnapshot().killEvents[0]!.eventSequence).toBe(
+      session.replayTraceSnapshot().hitEvents[0]!.eventSequence,
+    );
   });
 });

@@ -11,7 +11,7 @@ import { GestureSystem } from "./GestureSystem";
 import { enemyTouchesImpactZone, resolveLineHits, resolveLiveSegmentHits, resolveLiveSegmentDirectionalRejects, multiCutTier, segmentIntersectsCircle } from "./CollisionSystem";
 import { ScoringSystem, comboMultiplierFor } from "./ScoringSystem";
 import { EnergySystem } from "./EnergySystem";
-import { SkillSystem } from "./SkillSystem";
+import { resolveNovaPulseDefinition, SkillSystem } from "./SkillSystem";
 import { RunSession } from "./RunSession";
 import { Telemetry } from "./Telemetry";
 import { gravitonPullMultiplierForEnemy, splitSpawnSpecsForEnemy, stepEnemy, enemyXY } from "./Enemy";
@@ -22,9 +22,14 @@ import { pathLength, trimPathToMaxLength } from "./gesture-helpers";
 import { StrokeHitTracker } from "./StrokeHitTracker";
 import { enemyHitShakeOffset } from "./HitShake";
 import { shouldReserveLiveSlashForSolarLance } from "./SolarLanceReserve";
+import { resolveSolarLanceSnapshot } from "./SolarLanceResolver";
+import { createGuidedTutorialFlow, reduceTutorialFlow, type TutorialFlowState, type TutorialSignal, type TutorialStep } from "./onboarding/TutorialFlow";
+import { guidedStoryScenario } from "./onboarding/GuidedStoryScenario";
+import type { FeedbackController } from "../feedback/FeedbackController";
 import { shouldReserveLiveSlashForGravitySlow } from "./GravitySlowReserve";
 import { groupByComboTimeout } from "./ComboTiming";
 import { buildSkillCooldownSlots } from "./SkillCooldownSlots";
+import { SKILL_CHARGE_IDS, SkillChargeBank } from "./SkillChargeBank";
 import { buildBossHudState } from "./BossHudState";
 import { buildTutorialHudState } from "./TutorialHudState";
 import { buildBossShardTelegraph, type BossShardTelegraph } from "./BossShardTelegraph";
@@ -50,6 +55,8 @@ import { LaserVfx } from "../render/LaserVfx";
 import { HitBurst } from "../render/HitBurst";
 import { DestructionBurst } from "../render/DestructionBurst";
 import { drawDirectionalGuide, drawEnemyVisual, enemyTexture, enemyVisualStyle } from "../render/EnemyVisual";
+import { specialObjectAssetUrl } from "../render/SpecialVisual";
+import { textureFromAsset } from "../render/TextureAssets";
 import { enemySpriteMotion, enemyTravelAngleRad, type EnemySpriteMotion } from "../render/EnemyMotion";
 import { Hud } from "../render/Hud";
 import { ResultOverlay } from "../render/ResultOverlay";
@@ -64,7 +71,7 @@ import {
   type RankedRunStart,
 } from "../platform/BackendAdapter";
 import type { PlatformTelemetryContext } from "../platform/PlatformAdapter";
-import type { Point, EnemyState, EarthRef, ZoneTable, EnemyTable, ScoringConfig, DifficultyTable, SkillTable, OrbitProfile, WaveTable, HitResult, Segment, SpawnSpec } from "./types";
+import type { Point, EnemyState, EarthRef, ZoneTable, EnemyTable, ScoringConfig, DifficultyTable, SkillTable, OrbitProfile, WaveTable, HitResult, Segment, SpawnSpec, GestureResult } from "./types";
 import type { RankedReplaySpawnEvent } from "./RankedReplayTrace";
 
 // 한 판 플레이 씬 (implementation-plan §1, §4 게임 루프).
@@ -154,7 +161,9 @@ export class GameScene {
   private enemyTrailLayer: Graphics;
   private bossTelegraphLayer: Graphics;
   private enemyLayer: Container;
-  private specialLayer: Graphics;
+  private specialLayer: Container;
+  private specialGraphics: Graphics;
+  private specialSprites = new Map<number, Sprite>();
   private slashTrail: SlashTrail;
   private laser: LaserVfx;
   private hitBurst: HitBurst;
@@ -174,6 +183,8 @@ export class GameScene {
   private readonly showResultOverlay: boolean;
   private readonly backend: BackendAdapter;
   private readonly platformTelemetryContext: PlatformTelemetryContext;
+  private readonly feedback?: Pick<FeedbackController, "handle">;
+  private readonly onUserGesture?: () => void;
   private pendingRunStart?: RankedRunStart;
   private currentRunStart!: RankedRunStart;
 
@@ -191,6 +202,7 @@ export class GameScene {
   private gesture = new GestureSystem();
   onRunEnd: ((result: ModeResult) => void) | null = null;
   onRankedSubmissionUpdate: ((state: NonNullable<ModeResult["rankingSubmissionState"]>) => void) | null = null;
+  onGuidedTutorialStep: ((step: TutorialStep) => void) | null = null;
 
   // 적 스프라이트 (간단 풀)
   private sprites = new Map<number, EnemySpriteNode>();
@@ -199,7 +211,7 @@ export class GameScene {
   // 런 상태
   private running = false;
   private elapsedMs = 0;
-  private gauge = 0;
+  private skillCharges = new SkillChargeBank([]);
   private gravitySlowRemainingMs = 0;
   private gravitySlowMultiplier = 1;
   private deltaShieldRemainingMs = 0;
@@ -225,16 +237,45 @@ export class GameScene {
   private spawnOrdinalSeq = 0;
   private telemetrySessionTraceId = createTelemetrySessionTraceId();
   private telemetryEventSequence = 0;
+  private guidedTutorialFlow: TutorialFlowState | undefined;
+  private guidedTutorialInitialStep: TutorialStep | undefined;
+  private guidedScenarioEnemyIds = new Set<number>();
+  private guidedScenarioSlotByEnemyId = new Map<number, number>();
+  private novaPulseSucceeded = false;
+  private reducedMotion = false;
+
+  /** Legacy test/HUD bridge. Runtime gain and consume paths use skillCharges directly. */
+  private get gauge(): number {
+    return this.chargeBank().get("solar_lance");
+  }
+
+  private set gauge(value: number) {
+    this.chargeBank().fillAll(value);
+  }
+
+  private chargeBank(): SkillChargeBank {
+    if (!this.skillCharges) {
+      this.skillCharges = new SkillChargeBank(this.runConfig?.rules?.enabledSkills ?? SKILL_CHARGE_IDS);
+    }
+    return this.skillCharges;
+  }
+
+  private gainAllSkillCharges(amount: number): void {
+    this.chargeBank().gainAll(amount);
+  }
 
   constructor(
     runConfig: RunConfig = buildRunConfig("freeDefense"),
-    options: { showResultOverlay?: boolean; backend?: BackendAdapter; runStart?: RankedRunStart; platformTelemetryContext?: PlatformTelemetryContext } = {},
+    options: { showResultOverlay?: boolean; backend?: BackendAdapter; runStart?: RankedRunStart; platformTelemetryContext?: PlatformTelemetryContext; feedback?: Pick<FeedbackController, "handle">; onUserGesture?: () => void; reducedMotion?: boolean; guidedTutorialInitialStep?: TutorialStep } = {},
   ) {
     this.runConfig = runConfig;
     this.showResultOverlay = options.showResultOverlay ?? true;
     this.backend = options.backend ?? new LocalBackendAdapter();
     this.platformTelemetryContext = options.platformTelemetryContext ?? { runtime: "web_stub" };
+    this.feedback = options.feedback;
+    this.onUserGesture = options.onUserGesture;
     this.pendingRunStart = options.runStart;
+    this.guidedTutorialInitialStep = options.guidedTutorialInitialStep;
     this.stage = new Container();
     this.stage.sortableChildren = true;
 
@@ -249,22 +290,20 @@ export class GameScene {
 
     // L0 배경
     const bg = new Graphics();
-    bg.rect(0, 0, BASE_WIDTH, BASE_HEIGHT).fill({ color: 0x05060f });
+    drawGameplayBackdrop(bg);
     bg.zIndex = LAYER.BACKGROUND_SPACE;
     this.stage.addChild(bg);
 
     // L1 별
     const stars = new Graphics();
-    let seed = 1337;
-    const rand = (): number => {
-      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-      return seed / 0x7fffffff;
-    };
-    for (let i = 0; i < 140; i++) {
-      stars.circle(rand() * BASE_WIDTH, rand() * BASE_HEIGHT, 0.6 + rand() * 1.6).fill({ color: 0xffffff, alpha: 0.15 + rand() * 0.5 });
-    }
+    drawGameplayStars(stars);
     stars.zIndex = LAYER.STARS_NEBULA;
     this.stage.addChild(stars);
+
+    const orbitGuide = new Graphics();
+    drawGameplayOrbitGuide(orbitGuide);
+    orbitGuide.zIndex = LAYER.ORBIT_GUIDE;
+    this.stage.addChild(orbitGuide);
 
     // L3~L4 적 잔상/본체 레이어
     this.enemyTrailLayer = new Graphics();
@@ -279,8 +318,10 @@ export class GameScene {
     this.enemyLayer.zIndex = LAYER.ENEMIES;
     this.stage.addChild(this.enemyLayer);
 
-    this.specialLayer = new Graphics();
+    this.specialLayer = new Container();
     this.specialLayer.zIndex = LAYER.FRIENDLY;
+    this.specialGraphics = new Graphics();
+    this.specialLayer.addChild(this.specialGraphics);
     this.stage.addChild(this.specialLayer);
 
     // L7 지구
@@ -300,6 +341,7 @@ export class GameScene {
     this.result = new ResultOverlay();
     this.result.onRestart = () => this.restart();
     this.stage.addChild(this.hud.container, this.result.container);
+    this.setReducedMotion(options.reducedMotion ?? false);
 
     // 포인터 입력 (게임필드 = 1080x1920 좌표계)
     this.stage.eventMode = "static";
@@ -311,6 +353,16 @@ export class GameScene {
     this.stage.on("pointercancel", this.onPointerCancel, this);
 
     this.startRun();
+  }
+
+  /** Gameplay remains intact; only non-essential time-based visual effects are suppressed. */
+  setReducedMotion(enabled: boolean): void {
+    this.reducedMotion = enabled;
+    const visible = !enabled;
+    this.slashTrail.container.visible = visible;
+    this.laser.container.visible = visible;
+    this.destructionBurst.container.visible = visible;
+    this.hitBurst.container.visible = visible;
   }
 
   // ── 런 수명주기 ───────────────────────────────────────────────────────────
@@ -326,6 +378,11 @@ export class GameScene {
   }
 
   private startRun(): void {
+    this.guidedTutorialFlow = activeStoryStageForConfig(this.runConfig)?.id === "story-1"
+      ? createGuidedTutorialFlow(this.guidedTutorialInitialStep)
+      : undefined;
+    this.guidedScenarioEnemyIds?.clear();
+    this.guidedScenarioSlotByEnemyId?.clear();
     const diff = this.difficultyDef();
     let seedOverride: number | undefined;
     let gaugeOverride: number | undefined;
@@ -381,7 +438,9 @@ export class GameScene {
     this.scoring = new ScoringSystem(this.scoringCfg);
     this.energy = new EnergySystem(diff.earthEnergy);
     this.skills = new SkillSystem(this.skillTable);
-    this.gauge = gaugeOverride ?? (this.skillTable._debug.instantFillGauge ? GAUGE_MAX : 0);
+    this.skillCharges = new SkillChargeBank(this.runConfig.rules.enabledSkills);
+    this.skillCharges.fillAll(gaugeOverride ?? (this.skillTable._debug.instantFillGauge ? GAUGE_MAX : 0));
+    this.novaPulseSucceeded = false;
     this.elapsedMs = 0;
     this.gravitySlowRemainingMs = 0;
     this.gravitySlowMultiplier = 1;
@@ -402,10 +461,92 @@ export class GameScene {
     this.bossShardTelegraphs = [];
     this.enemyTrailLayer.clear();
     this.bossTelegraphLayer?.clear();
-    this.specialLayer?.clear();
+    this.specialGraphics?.clear();
+    this.clearSpecialSprites();
     this.earth.setVisualState("healthy");
     this.resetStrokeState();
     this.spawnDevQaPreset(qaPreset);
+    this.spawnGuidedStoryScenario();
+  }
+
+  private guidedStoryScenarioActive(): boolean {
+    const stage = activeStoryStageForConfig(this.runConfig);
+    return stage?.id === "story-1" && this.guidedTutorialFlow != null && this.guidedTutorialFlow.step !== "reward" && this.guidedTutorialFlow.step !== "complete";
+  }
+
+  /** Story 1 is intentionally scripted, so its teaching targets are not mixed with random waves. */
+  private spawnGuidedStoryScenario(): void {
+    const stage = activeStoryStageForConfig(this.runConfig);
+    const flow = this.guidedTutorialFlow;
+    if (stage?.id !== "story-1" || !flow) return;
+    const scenario = guidedStoryScenario(stage.id).find((entry) => entry.step === flow.step);
+    if (!scenario) return;
+    const guidedAlive = this.guidedScenarioEnemies();
+    const occupiedSlots = new Set(guidedAlive.flatMap((enemy) => {
+      const slot = this.guidedScenarioSlotByEnemyId.get(enemy.id);
+      return slot == null ? [] : [slot];
+    }));
+    const missingSlots = Array.from({ length: scenario.count }, (_, slot) => slot)
+      .filter((slot) => !occupiedSlots.has(slot));
+    if (scenario.target === "solar_line") this.skillCharges.set("solar_lance", GAUGE_MAX);
+    if (missingSlots.length === 0) return;
+
+    const make = (startAngleRad: number, startRadius: number): SpawnSpec => {
+      const def = this.enemies.basic_meteor!;
+      return {
+        enemyType: "basic_meteor",
+        spawnAtMs: this.elapsedMs,
+        startAngleRad,
+        startRadius,
+        angularSpeed: def.angularSpeed,
+        approachSpeed: def.approachSpeed,
+      };
+    };
+    const spawns = missingSlots.map((slot) => scenario.target === "last_save_meteor"
+      ? make(-Math.PI / 2, scenario.startRadius ?? 300)
+      : scenario.target === "solar_line"
+        ? make(slot % 2 === 0 ? 0 : Math.PI, 300)
+        : make(-Math.PI / 2 + slot * 0.35, 420));
+    const ordered = this.spawnWithReplay(spawns);
+    const spawnedSlotByOrdinal = new Map<number, number>();
+    ordered.forEach((spawn, index) => {
+      const slot = missingSlots[index];
+      if (spawn.spawnOrdinal != null && slot != null) spawnedSlotByOrdinal.set(spawn.spawnOrdinal, slot);
+    });
+    for (const enemy of this.objects.getAlive()) {
+      if (enemy.spawnOrdinal == null) continue;
+      const slot = spawnedSlotByOrdinal.get(enemy.spawnOrdinal);
+      if (slot == null) continue;
+      enemy.hp = 1;
+      enemy.maxHp = 1;
+      this.guidedScenarioEnemyIds.add(enemy.id);
+      this.guidedScenarioSlotByEnemyId.set(enemy.id, slot);
+    }
+  }
+
+  private clearGuidedStoryScenario(): void {
+    for (const enemy of this.guidedScenarioEnemies()) {
+      this.objects.kill(enemy.id);
+      this.removeSprite(enemy.id);
+    }
+    this.guidedScenarioEnemyIds.clear();
+    this.guidedScenarioSlotByEnemyId.clear();
+    this.objects.prune();
+  }
+
+  private guidedScenarioEnemies(): EnemyState[] {
+    const alive = this.objects.getAlive();
+    const aliveById = new Map(alive.map((enemy) => [enemy.id, enemy] as const));
+    for (const id of this.guidedScenarioEnemyIds) {
+      if (!aliveById.has(id)) {
+        this.guidedScenarioEnemyIds.delete(id);
+        this.guidedScenarioSlotByEnemyId.delete(id);
+      }
+    }
+    return [...this.guidedScenarioEnemyIds].flatMap((id) => {
+      const enemy = aliveById.get(id);
+      return enemy ? [enemy] : [];
+    });
   }
 
   private consumeRunStart(seedOverride: number | undefined): RankedRunStart {
@@ -723,6 +864,7 @@ export class GameScene {
     if (!this.running) return;
     if (this.activePointerId !== null) return;
     this.activePointerId = this.pointerId(e);
+    this.onUserGesture?.();
     const p = this.toPoint(e);
     this.gesture.onPointerDown(p);
     this.resetStrokeState();
@@ -771,6 +913,11 @@ export class GameScene {
 
   private onPointerCancel(e: FederatedPointerEvent): void {
     if (!this.isActivePointer(e)) return;
+    this.cancelActivePointer();
+  }
+
+  /** Clears stale gesture state before a hidden WebView can resume. */
+  cancelActivePointer(): void {
     this.activePointerId = null;
     this.livePoints = [];
     this.slashTrail.setLive(this.livePoints);
@@ -781,37 +928,65 @@ export class GameScene {
   private resolveInput(points: Point[], earth: EarthRef): void {
     const committedMovement = pathLength(points) >= MISS_COMMIT_DISTANCE_PX;
     const gesture = this.gestureResultFromPoints(points, earth);
-    const act = this.skillEnabled("solar_lance") ? this.skills.trySolarLance(gesture, { earth, gauge: this.gauge, screenShortSide: BASE_WIDTH }) : null;
+    const act = this.skillEnabled("solar_lance") ? this.skills.trySolarLance(gesture, { earth, gauge: this.chargeBank().get("solar_lance"), screenShortSide: BASE_WIDTH }) : null;
 
     if (act) {
+      const guidedSolarTraining = this.guidedTutorialFlow?.step === "solar_lance";
+      const guidedTargetsBefore = guidedSolarTraining
+        ? new Set(this.guidedScenarioEnemies().map((enemy) => enemy.id))
+        : new Set<number>();
       if (!this.skillTable._debug.infiniteGauge) {
-        this.gauge = Math.max(0, this.gauge - this.skillTable.solar_lance.gaugeCost);
+        this.chargeBank().consume("solar_lance");
       }
       this.recordSkillUse("solar_lance");
       Telemetry.track("skill_fire", { skillId: "solar_lance" });
-      this.laser.fire(act.vfxLine); // 연출 — 판정 불변
+      const aliveEnemies = this.objects.getAlive();
+      const aliveSpecialObjects = this.specialObjects?.getAlive() ?? [];
+      const lanceResolution = resolveSolarLanceSnapshot(
+        act.vfxLine,
+        aliveEnemies.map((enemy) => {
+          const position = enemyXY(enemy);
+          return { id: enemy.id, x: position.x, y: position.y, radiusPx: enemy.radiusPx * this.enemyVisualScale(enemy) };
+        }),
+        aliveSpecialObjects,
+      );
+      const allowedEnemyIds = new Set(lanceResolution.enemyIds);
+      this.laser.fire(lanceResolution.vfxLine); // 연출과 판정은 같은 절단선 사용
       const lanceKills = this.applyHits(
-        this.applyBossWeakPointAccuracy(resolveLineHits(act.vfxLine, this.objects.getAlive(), earth.cx, earth.cy, earth.r, this.zones, {
+        this.applyBossWeakPointAccuracy(resolveLineHits(lanceResolution.vfxLine, aliveEnemies, earth.cx, earth.cy, earth.r, this.zones, {
           hitRadiusInflatePx: SOLAR_LANCE_HIT_INFLATE_PX,
           hitRadiusScaleForEnemy: (enemy) => this.enemyVisualScale(enemy),
-        }), act.vfxLine, earth),
+        }).filter((hit) => allowedEnemyIds.has(hit.enemyId)), lanceResolution.vfxLine, earth),
         this.skillTable.solar_lance.hitDamage ?? NORMAL_SLASH_DAMAGE,
         this.replayNowMs(),
         "solar_lance",
-        act.vfxLine,
+        lanceResolution.vfxLine,
         "solar_lance",
       );
       this.commitKills(lanceKills, earth, false);
-      this.resolveSpecialLine(act.vfxLine);
+      this.resolveSpecialIds(lanceResolution.specialObjectIds);
       this.objects.prune();
+      if (guidedSolarTraining) {
+        const killedGuidedTargets = lanceKills.filter((kill) => guidedTargetsBefore.has(kill.hit.enemyId)).length;
+        if (guidedTargetsBefore.size > 0 && killedGuidedTargets === guidedTargetsBefore.size) {
+          this.bossRuntime?.deferUntil(this.elapsedMs);
+          this.specialObjects?.deferUntil(this.elapsedMs);
+          this.advanceGuidedTutorial({ type: "skill_fired", skillId: "solar_lance" });
+        } else {
+          this.chargeBank().set("solar_lance", GAUGE_MAX);
+          this.skills.resetCooldown("solar_lance");
+          this.spawnGuidedStoryScenario();
+        }
+      }
       return;
     }
 
-    const nova = this.skillEnabled("nova_pulse") ? (this.skills.tryNovaPulse?.(gesture, { earth, gauge: this.gauge, screenShortSide: BASE_WIDTH }) ?? null) : null;
+    const nova = this.skillEnabled("nova_pulse") ? (this.skills.tryNovaPulse?.(gesture, { earth, gauge: this.chargeBank().get("nova_pulse"), screenShortSide: BASE_WIDTH }) ?? null) : null;
     if (nova) {
       if (!this.skillTable._debug.infiniteGauge) {
-        this.gauge = Math.max(0, this.gauge - this.skillTable.nova_pulse.gaugeCost);
+        this.chargeBank().consume("nova_pulse");
       }
+      this.novaPulseSucceeded = true;
       this.recordSkillUse("nova_pulse");
       Telemetry.track("skill_fire", { skillId: "nova_pulse" });
       const kills = this.applyHits(this.resolveNovaPulseHits(earth, nova.radiusPx, nova.pushPx, nova.targetCap), nova.damage, this.replayNowMs(), "skill", undefined, "nova_pulse");
@@ -833,10 +1008,10 @@ export class GameScene {
       return;
     }
 
-    const orbital = this.skillEnabled("orbital_cut") ? (this.skills.tryOrbitalCut?.(gesture, { earth, gauge: this.gauge, screenShortSide: BASE_WIDTH }) ?? null) : null;
+    const orbital = this.skillEnabled("orbital_cut") ? (this.skills.tryOrbitalCut?.(gesture, { earth, gauge: this.chargeBank().get("orbital_cut"), screenShortSide: BASE_WIDTH }) ?? null) : null;
     if (orbital) {
       if (!this.skillTable._debug.infiniteGauge) {
-        this.gauge = Math.max(0, this.gauge - this.skillTable.orbital_cut.gaugeCost);
+        this.chargeBank().consume("orbital_cut");
       }
       this.recordSkillUse("orbital_cut");
       Telemetry.track("skill_fire", { skillId: "orbital_cut" });
@@ -860,10 +1035,10 @@ export class GameScene {
       return;
     }
 
-    const shield = this.skillEnabled("delta_shield") ? (this.skills.tryDeltaShield?.(gesture, { earth, gauge: this.gauge, screenShortSide: BASE_WIDTH }) ?? null) : null;
+    const shield = this.skillEnabled("delta_shield") ? (this.skills.tryDeltaShield?.(gesture, { earth, gauge: this.chargeBank().get("delta_shield"), screenShortSide: BASE_WIDTH }) ?? null) : null;
     if (shield) {
       if (!this.skillTable._debug.infiniteGauge) {
-        this.gauge = Math.max(0, this.gauge - this.skillTable.delta_shield.gaugeCost);
+        this.chargeBank().consume("delta_shield");
       }
       this.deltaShieldRemainingMs = shield.durationMs;
       this.deltaShieldAbsorbs = shield.absorbCount;
@@ -881,10 +1056,10 @@ export class GameScene {
       return;
     }
 
-    const slow = this.skillEnabled("gravity_slow") ? this.skills.tryGravitySlow(gesture, { earth, gauge: this.gauge, screenShortSide: BASE_WIDTH }) : null;
+    const slow = this.skillEnabled("gravity_slow") ? this.skills.tryGravitySlow(gesture, { earth, gauge: this.chargeBank().get("gravity_slow"), screenShortSide: BASE_WIDTH }) : null;
     if (slow) {
       if (!this.skillTable._debug.infiniteGauge) {
-        this.gauge = Math.max(0, this.gauge - this.skillTable.gravity_slow.gaugeCost);
+        this.chargeBank().consume("gravity_slow");
       }
       this.gravitySlowRemainingMs = slow.durationMs;
       this.gravitySlowMultiplier = slow.slowMultiplier;
@@ -900,14 +1075,25 @@ export class GameScene {
       return;
     }
 
+    this.showNovaPulseNearMiss(gesture, earth);
+
     if (this.strokeKills.length > 0) {
       this.commitKills(this.strokeKills, earth, true);
+      if (committedMovement) this.advanceGuidedTutorial({ type: "slash_committed" });
     } else if (committedMovement && !this.strokeHadHit) {
+      this.advanceGuidedTutorial({ type: "slash_committed" });
       this.scoring.onMiss(); // 탭/짧은 입력은 neutral, 의미 있는 빈 슬래시만 콤보 끊김.
       this.runSession.recordComboBreak("miss", this.replayNowMs());
       Telemetry.track("combo_break", { reason: "miss" });
     }
     this.objects.prune();
+  }
+
+  private showNovaPulseNearMiss(gesture: GestureResult, earth: EarthRef): void {
+    if (!this.skillEnabled("nova_pulse") || this.novaPulseSucceeded) return;
+    const evaluation = this.skills.evaluateNovaPulse?.(gesture, { earth, gauge: this.chargeBank().get("nova_pulse"), screenShortSide: BASE_WIDTH });
+    if (!evaluation || evaluation.ok || !evaluation.candidate) return;
+    this.hud.flashBanner(t(`skillTutorial.novaPulse.feedback.${evaluation.reason}`), 0x93f7ff);
   }
 
   private resetStrokeState(): void {
@@ -1017,12 +1203,12 @@ export class GameScene {
     return hits;
   }
 
-  private resolveSpecialLine(line: Segment): boolean {
+  private resolveSpecialIds(ids: readonly number[]): boolean {
     if (!this.specialObjects) return false;
     let consumed = false;
-    for (const object of this.specialObjects.getAlive()) {
-      if (!segmentIntersectsCircle(line, object.x, object.y, object.radiusPx)) continue;
-      consumed = this.applySpecialHit(object) || consumed;
+    for (const id of ids) {
+      const object = this.specialObjects.getAlive().find((candidate) => candidate.id === id);
+      if (object) consumed = this.applySpecialHit(object) || consumed;
     }
     return consumed;
   }
@@ -1059,7 +1245,7 @@ export class GameScene {
 
     if (effect.heal > 0) this.energy.heal(effect.heal);
     if (effect.score > 0) this.scoring.addBonus(effect.score);
-    if (effect.gauge > 0) this.gauge = Math.min(GAUGE_MAX, this.gauge + effect.gauge);
+    if (effect.gauge > 0) this.gainAllSkillCharges(effect.gauge);
     if (effect.slowMs > 0) {
       this.gravitySlowRemainingMs = Math.max(this.gravitySlowRemainingMs, effect.slowMs);
       this.gravitySlowMultiplier = Math.min(this.gravitySlowMultiplier, 0.55);
@@ -1085,6 +1271,11 @@ export class GameScene {
   ): PendingKill[] {
     const killed: PendingKill[] = [];
     for (const h of hits) {
+      if (
+        this.guidedTutorialFlow?.step === "solar_lance" &&
+        source !== "solar_lance" &&
+        this.guidedScenarioEnemyIds?.has(h.enemyId)
+      ) continue;
       if (h.blocked) {
         this.strokeHadHit = true;
         this.strokeHitTracker.recordHit(h.enemyId, hitAtMs);
@@ -1116,6 +1307,9 @@ export class GameScene {
         });
       }
       if (!result.killed || !result.enemy) continue;
+
+      this.guidedScenarioEnemyIds?.delete(h.enemyId);
+      this.guidedScenarioSlotByEnemyId?.delete(h.enemyId);
 
       const splitSpawns = splitSpawnSpecsForEnemy(result.enemy, hitAtMs);
       if (splitSpawns.length > 0) {
@@ -1197,11 +1391,13 @@ export class GameScene {
         lastSave: res.lastSave,
         bossWeakHits: group.filter((kill) => kill.hit.accuracy === "bossWeak").length,
       });
-      this.gauge = Math.min(GAUGE_MAX, this.gauge + res.gauge);
+      this.gainAllSkillCharges(res.gauge);
+      this.feedback?.handle({ type: res.lastSave ? "last_save" : "normal_hit", atMs: group[group.length - 1]?.hitAtMs ?? this.elapsedMs });
 
       const tier = multiCutTier(group.length);
       if (tier !== "none") this.hud.flashBanner(multiCutLabel(tier), 0xffc14d);
       if (res.lastSave) {
+        this.advanceGuidedTutorial({ type: "enemy_killed", band: "lastSave" });
         this.destructionBurst.spawn(earth.cx, earth.cy, {
           color: 0x3fd8ff,
           secondaryColor: 0xffffff,
@@ -1286,7 +1482,7 @@ export class GameScene {
     if (!this.skillEnabled("solar_lance")) return false;
     return shouldReserveLiveSlashForSolarLance(points, earth, {
       skillReady: this.skills.isReady("solar_lance"),
-      gauge: this.gauge,
+      gauge: this.chargeBank().get("solar_lance"),
       gaugeCost: this.skillTable.solar_lance.gaugeCost,
       infiniteGauge: this.skillTable._debug.infiniteGauge,
       screenShortSide: BASE_WIDTH,
@@ -1297,7 +1493,7 @@ export class GameScene {
     if (!this.skillEnabled("gravity_slow")) return false;
     return shouldReserveLiveSlashForGravitySlow(points, earth, {
       skillReady: this.skills.isReady("gravity_slow"),
-      gauge: this.gauge,
+      gauge: this.chargeBank().get("gravity_slow"),
       gaugeCost: this.skillTable.gravity_slow.gaugeCost,
       infiniteGauge: this.skillTable._debug.infiniteGauge,
       circleTurnMinRad: this.skillTable.gravity_slow.circleTurnMinRad ?? 4.8,
@@ -1411,6 +1607,8 @@ export class GameScene {
     const r = en.radiusPx;
     const style = enemyVisualStyle(en.type);
     if (en.boss) {
+      g.circle(0, 0, r + 54).stroke({ width: 3, color: style.rim, alpha: 0.16 });
+      g.circle(0, 0, r + 36).stroke({ width: 6, color: style.sparkleColor, alpha: 0.18 });
       g.circle(0, 0, r + 14).stroke({ width: 10, color: style.sparkleColor, alpha: 0.66 });
       g.circle(0, 0, r + 30).stroke({ width: 4, color: 0xfef3c7, alpha: 0.34 });
       g.circle(0, 0, r * 0.28).stroke({ width: 8, color: 0xffffff, alpha: 0.22 });
@@ -1504,8 +1702,11 @@ export class GameScene {
       }
 
       // spawn
-      const spawns = this.wave.next(this.elapsedMs);
-      const bossRequests = this.bossRuntime.nextSpawns(this.elapsedMs, this.objects.getAlive().some((enemy) => enemy.boss));
+      const scriptedTutorial = this.guidedStoryScenarioActive();
+      const scheduledSpawns = this.wave.next(this.elapsedMs);
+      const spawns = scriptedTutorial ? [] : scheduledSpawns;
+      if (scriptedTutorial) this.bossRuntime.deferUntil(this.elapsedMs);
+      const bossRequests = scriptedTutorial ? [] : this.bossRuntime.nextSpawns(this.elapsedMs, this.objects.getAlive().some((enemy) => enemy.boss));
       const bossSpawns = bossRequests.map((request) => this.bossSpawnSpec(request.enemyType, request.spawnAtMs)).filter((spawn): spawn is SpawnSpec => Boolean(spawn));
       const orderedSpawns = this.spawnWithReplay([...spawns, ...bossSpawns]);
       for (const spawn of orderedSpawns) Telemetry.track("spawn", { enemyType: spawn.enemyType, modeId: this.runConfig.modeId, difficulty: this.runConfig.difficulty });
@@ -1528,12 +1729,13 @@ export class GameScene {
         this.spawnBossShardEvent(event, activeBoss);
       }
 
-      this.specialObjects.next(this.elapsedMs, { energy: this.energy.getEnergy(), maxEnergy: this.energy.getMax() });
-      this.specialObjects.step(this.elapsedMs);
-      for (const reward of this.specialObjects.expire(this.elapsedMs)) {
+      if (scriptedTutorial) this.specialObjects.deferUntil(this.elapsedMs);
+      if (!scriptedTutorial) this.specialObjects.next(this.elapsedMs, { energy: this.energy.getEnergy(), maxEnergy: this.energy.getMax() });
+      if (!scriptedTutorial) this.specialObjects.step(this.elapsedMs);
+      for (const reward of scriptedTutorial ? [] : this.specialObjects.expire(this.elapsedMs)) {
         if (isProtectObjectiveObject(reward.type)) this.protectedCount += 1;
         this.scoring.addBonus(reward.score);
-        this.gauge = Math.min(GAUGE_MAX, this.gauge + reward.gauge);
+        this.gainAllSkillCharges(reward.gauge);
         if (reward.heal && reward.heal > 0) {
           this.energy.heal(reward.heal);
           this.earth.setVisualState(this.energy.visualState());
@@ -1545,9 +1747,18 @@ export class GameScene {
       const diff = this.difficultyDef();
       const movementDtMs = this.gravitySlowRemainingMs > 0 ? dtMs * this.gravitySlowMultiplier : dtMs;
       const aliveBeforeMovement = this.objects.getAlive();
+      let guidedScenarioImpacted = false;
       for (const en of aliveBeforeMovement) {
         stepEnemy(en, this.movementDtForEnemy(en, movementDtMs, aliveBeforeMovement));
         if (enemyTouchesImpactZone(en.radius, en.radiusPx, EARTH_GAMEPLAY_RADIUS, this.zones, diff.gravitySwell, en.earthImpactRadiusPx)) {
+          if (scriptedTutorial && this.guidedScenarioEnemyIds.has(en.id)) {
+            this.objects.kill(en.id);
+            this.guidedScenarioEnemyIds.delete(en.id);
+            this.guidedScenarioSlotByEnemyId.delete(en.id);
+            this.removeSprite(en.id);
+            guidedScenarioImpacted = true;
+            continue;
+          }
           if (this.deltaShieldRemainingMs > 0 && this.deltaShieldAbsorbs > 0) {
             this.applyDeltaShieldAbsorb(en);
             continue;
@@ -1567,6 +1778,9 @@ export class GameScene {
         }
       }
       this.objects.prune();
+      if (guidedScenarioImpacted && this.guidedStoryScenarioActive()) {
+        this.spawnGuidedStoryScenario();
+      }
       if (this.modeRuntimeRules.endOnBossSequenceComplete && this.bossRuntime.sequenceComplete()) {
         this.endRun("boss_sequence_complete");
         return;
@@ -1611,10 +1825,12 @@ export class GameScene {
 
     // 시각 갱신 (running 무관)
     this.earth.update(dtMs);
-    this.slashTrail.update(dtMs);
-    this.laser.update(dtMs);
-    this.destructionBurst.update(dtMs);
-    this.hitBurst.update(dtMs);
+    if (!this.reducedMotion) {
+      this.slashTrail.update(dtMs);
+      this.laser.update(dtMs);
+      this.destructionBurst.update(dtMs);
+      this.hitBurst.update(dtMs);
+    }
 
     const snap = this.scoring.snapshot();
     const cost = this.skillTable.solar_lance.gaugeCost;
@@ -1643,6 +1859,7 @@ export class GameScene {
         waveNumber: wave.waveNumber,
         waveProgressRatio: wave.progressRatio,
         nextWaveInMs: wave.nextWaveInMs,
+        waveVisible: !this.guidedStoryScenarioActive(),
         boss,
         shield: {
           active: this.deltaShieldRemainingMs > 0 && this.deltaShieldAbsorbs > 0,
@@ -1651,23 +1868,35 @@ export class GameScene {
           absorbsRemaining: this.deltaShieldAbsorbs,
           maxAbsorbs: this.deltaShieldMaxAbsorbs,
         },
-        tutorial: buildTutorialHudState(this.runConfig, boss),
+        tutorial: buildTutorialHudState(this.runConfig, boss, this.elapsedMs, this.guidedTutorialFlow),
         timeMs: this.elapsedMs,
       },
       dtMs,
     );
   }
 
+  private advanceGuidedTutorial(signal: TutorialSignal): void {
+    if (!this.guidedTutorialFlow) return;
+    const next = reduceTutorialFlow(this.guidedTutorialFlow, signal);
+    if (next === this.guidedTutorialFlow) return;
+    this.clearGuidedStoryScenario();
+    this.guidedTutorialFlow = next;
+    this.guidedTutorialInitialStep = next.step;
+    this.spawnGuidedStoryScenario();
+    this.onGuidedTutorialStep?.(next.step);
+  }
+
   private skillCooldownSlots() {
     const enabled = new Set<SkillId>(this.runConfig.rules.enabledSkills);
+    const novaDefinition = resolveNovaPulseDefinition(this.skillTable.nova_pulse);
     const defs = [
       { id: "solar_lance", label: t("skill.solar_lance"), cost: this.skillTable.solar_lance.gaugeCost, cooldownSec: this.skillTable.solar_lance.cooldownSec, active: enabled.has("solar_lance") },
       { id: "orbital_cut", label: t("skill.orbital_cut"), cost: this.skillTable.orbital_cut.gaugeCost, cooldownSec: this.skillTable.orbital_cut.cooldownSec, active: enabled.has("orbital_cut") },
       { id: "gravity_slow", label: t("skill.gravity_slow"), cost: this.skillTable.gravity_slow.gaugeCost, cooldownSec: this.skillTable.gravity_slow.cooldownSec, active: enabled.has("gravity_slow") },
       { id: "delta_shield", label: t("skill.delta_shield"), cost: this.skillTable.delta_shield.gaugeCost, cooldownSec: this.skillTable.delta_shield.cooldownSec, active: enabled.has("delta_shield") },
-      { id: "nova_pulse", label: t("skill.nova_pulse"), cost: this.skillTable.nova_pulse.gaugeCost, cooldownSec: this.skillTable.nova_pulse.cooldownSec, active: enabled.has("nova_pulse") },
+      { id: "nova_pulse", label: t("skill.nova_pulse"), cost: novaDefinition.gaugeCost, cooldownSec: novaDefinition.cooldownSec, active: enabled.has("nova_pulse") },
     ];
-    return buildSkillCooldownSlots(defs, this.gauge, (skillId) => this.skills?.cooldownRemaining(skillId) ?? 0);
+    return buildSkillCooldownSlots(defs, (skillId) => this.chargeBank().get(skillId), (skillId) => this.skills?.cooldownRemaining(skillId) ?? 0);
   }
 
   private skillEnabled(skillId: SkillId): boolean {
@@ -1765,20 +1994,120 @@ export class GameScene {
   }
 
   private drawSpecialObjects(): void {
-    this.specialLayer.clear();
+    const graphics = this.specialGraphics;
+    graphics.clear();
+    const activeIds = new Set<number>();
     for (const object of this.specialObjects?.getAlive?.() ?? []) {
+      activeIds.add(object.id);
       const color = specialObjectColor(object.type);
       if (object.motion.kind === "satelliteOrbit") {
-        this.specialLayer.circle(object.motion.originX, object.motion.originY, object.motion.orbitRadiusPx).stroke({ width: 2, color, alpha: 0.18 });
+        graphics.circle(object.motion.originX, object.motion.originY, object.motion.orbitRadiusPx).stroke({ width: 2, color, alpha: 0.18 });
       }
       if (object.motion.kind !== "static") {
-        this.specialLayer.moveTo(object.previousX, object.previousY).lineTo(object.x, object.y).stroke({ width: 5, color, alpha: 0.24, cap: "round" });
+        graphics.moveTo(object.previousX, object.previousY).lineTo(object.x, object.y).stroke({ width: 5, color, alpha: 0.24, cap: "round" });
       }
-      this.specialLayer.circle(object.x, object.y, object.radiusPx).fill({ color, alpha: 0.22 });
-      this.specialLayer.circle(object.x, object.y, object.radiusPx).stroke({ width: 7, color, alpha: 0.78 });
-      this.specialLayer.circle(object.x, object.y, Math.max(8, object.radiusPx * 0.28)).fill({ color: 0xffffff, alpha: 0.5 });
-      drawSpecialObjectSymbol(this.specialLayer, object, color);
+      graphics.circle(object.x + object.radiusPx * 0.08, object.y + object.radiusPx * 0.12, object.radiusPx * 1.08).fill({ color: 0x000000, alpha: 0.18 });
+      graphics.circle(object.x, object.y, object.radiusPx).fill({ color, alpha: 0.24 });
+      graphics.circle(object.x - object.radiusPx * 0.22, object.y - object.radiusPx * 0.26, object.radiusPx * 0.58).fill({ color: 0xffffff, alpha: 0.1 });
+      graphics.circle(object.x, object.y, object.radiusPx).stroke({ width: 8, color, alpha: 0.82 });
+      graphics.circle(object.x, object.y, object.radiusPx * 1.24).stroke({ width: 3, color: 0xffffff, alpha: 0.16 });
+      graphics.circle(object.x, object.y, Math.max(8, object.radiusPx * 0.28)).fill({ color: 0xffffff, alpha: 0.54 });
+      this.updateSpecialSprite(object);
+      drawSpecialObjectSymbol(graphics, object, color);
     }
+    this.pruneSpecialSprites(activeIds);
+  }
+
+  private updateSpecialSprite(object: SpecialObjectState): void {
+    const texture = textureFromAsset(specialObjectAssetUrl(object.type));
+    if (!texture) return;
+    const sprites = this.specialSpriteMap();
+    let sprite = sprites.get(object.id);
+    if (!sprite) {
+      sprite = new Sprite(texture);
+      sprite.anchor.set(0.5);
+      sprites.set(object.id, sprite);
+      this.specialLayer.addChild(sprite);
+    } else if (sprite.texture !== texture) {
+      sprite.texture = texture;
+    }
+    sprite.position.set(object.x, object.y);
+    sprite.width = object.radiusPx * 1.7;
+    sprite.height = object.radiusPx * 1.7;
+    sprite.alpha = 0.9;
+  }
+
+  private pruneSpecialSprites(activeIds: ReadonlySet<number>): void {
+    const sprites = this.specialSpriteMap();
+    for (const [id, sprite] of sprites) {
+      if (activeIds.has(id)) continue;
+      sprite.destroy();
+      sprites.delete(id);
+    }
+  }
+
+  private clearSpecialSprites(): void {
+    this.pruneSpecialSprites(new Set());
+  }
+
+  /** Test harnesses may intentionally construct a partial scene without field initializers. */
+  private specialSpriteMap(): Map<number, Sprite> {
+    return this.specialSprites ?? (this.specialSprites = new Map<number, Sprite>());
+  }
+}
+
+function drawGameplayBackdrop(g: Graphics): void {
+  g.rect(0, 0, BASE_WIDTH, BASE_HEIGHT).fill({ color: 0x05060f });
+  g.circle(BASE_WIDTH * 0.1, BASE_HEIGHT * 0.2, 430).fill({ color: 0x10245f, alpha: 0.16 });
+  g.circle(BASE_WIDTH * 0.86, BASE_HEIGHT * 0.16, 360).fill({ color: 0x2b164f, alpha: 0.14 });
+  g.circle(BASE_WIDTH * 0.72, BASE_HEIGHT * 0.72, 520).fill({ color: 0x06273a, alpha: 0.14 });
+  g.circle(BASE_WIDTH * 0.28, BASE_HEIGHT * 0.62, 440).fill({ color: 0x1a0a2e, alpha: 0.1 });
+  for (let i = 0; i < 7; i += 1) {
+    const y = 180 + i * 230;
+    const color = i % 2 === 0 ? 0x3fd8ff : 0xffc14d;
+    const x0 = i % 2 === 0 ? -80 : BASE_WIDTH + 80;
+    const x1 = i % 2 === 0 ? BASE_WIDTH * 0.48 : BASE_WIDTH * 0.54;
+    g.moveTo(x0, y).lineTo(x1, y + 54).stroke({ width: 2, color, alpha: 0.055, cap: "round" });
+  }
+}
+
+function drawGameplayStars(g: Graphics): void {
+  let seed = 1337;
+  const rand = (): number => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  for (let i = 0; i < 190; i += 1) {
+    const x = rand() * BASE_WIDTH;
+    const y = rand() * BASE_HEIGHT;
+    const size = 0.6 + rand() * (i % 17 === 0 ? 3.4 : 1.7);
+    const warm = rand() > 0.86;
+    g.circle(x, y, size).fill({ color: warm ? 0xffe3a3 : 0xffffff, alpha: 0.14 + rand() * 0.5 });
+    if (i % 31 === 0) {
+      g.moveTo(x - size * 3, y).lineTo(x + size * 3, y).stroke({ width: 1.4, color: warm ? 0xffc14d : 0x7dd3fc, alpha: 0.2, cap: "round" });
+      g.moveTo(x, y - size * 3).lineTo(x, y + size * 3).stroke({ width: 1.4, color: warm ? 0xffc14d : 0x7dd3fc, alpha: 0.16, cap: "round" });
+    }
+  }
+}
+
+function drawGameplayOrbitGuide(g: Graphics): void {
+  const cx = BASE_WIDTH / 2;
+  const cy = 900;
+  const lanes = [
+    { rx: 270, ry: 78, alpha: 0.1, color: 0x3fd8ff },
+    { rx: 440, ry: 128, alpha: 0.08, color: 0x7dd3fc },
+    { rx: 620, ry: 184, alpha: 0.065, color: 0xffc14d },
+    { rx: 820, ry: 244, alpha: 0.05, color: 0xa78bfa },
+  ] as const;
+  for (const lane of lanes) {
+    g.ellipse(cx, cy, lane.rx, lane.ry).stroke({ width: 2, color: lane.color, alpha: lane.alpha });
+    g.ellipse(cx, cy, lane.rx * 0.98, lane.ry * 0.98).stroke({ width: 1, color: 0xffffff, alpha: lane.alpha * 0.45 });
+  }
+  for (let i = 0; i < 18; i += 1) {
+    const angle = (i / 18) * Math.PI * 2;
+    const x = cx + Math.cos(angle) * 610;
+    const y = cy + Math.sin(angle) * 180;
+    g.circle(x, y, i % 3 === 0 ? 3.5 : 2).fill({ color: i % 2 === 0 ? 0x3fd8ff : 0xffc14d, alpha: 0.12 });
   }
 }
 

@@ -7,6 +7,13 @@ export default defineConfig({
     target: "es2022",
     outDir: "dist",
     chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          pixi: ["pixi.js"],
+        },
+      },
+    },
   },
   server: {
     host: true,

@@ -5,6 +5,7 @@ import {
   type ModeId,
   type ModeResult,
   type RunConfig,
+  type SkillId,
   type StoryStageId,
 } from "./ModeConfig";
 import type { BossId } from "./BossDefinitions";
@@ -38,6 +39,7 @@ export type AppAction =
       freeDefensePreset?: FreeDefensePresetId;
       practiceBossId?: BossId;
       storyStageId?: StoryStageId;
+      unlockedSkills?: SkillId[];
       source?: AppRunSource;
     }
   | { type: "RETRY_RUN"; seed?: number }
@@ -87,6 +89,8 @@ export function appStateReducer(state: AppState, action: AppAction): AppState {
       freeDefensePreset: action.freeDefensePreset,
       practiceBossId: action.practiceBossId,
       storyStageId: action.storyStageId,
+      unlockedSkills: action.unlockedSkills,
+      source: action.source ?? "play",
     });
     return {
       screen: "gameplay",
@@ -107,6 +111,8 @@ export function appStateReducer(state: AppState, action: AppAction): AppState {
       freeDefensePreset: state.runConfig.rules.freeDefensePreset,
       practiceBossId: state.runConfig.rules.bossPolicy.bossEnemyType as BossId,
       storyStageId: modeId === "story" ? state.lastResult?.activeStoryStageId : undefined,
+      unlockedSkills: state.runConfig.rules.enabledSkills,
+      source: state.runSource,
     });
     return {
       screen: "gameplay",

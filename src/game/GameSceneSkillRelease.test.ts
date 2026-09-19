@@ -42,6 +42,7 @@ function makeSceneStub() {
   scene.hitBurst = { spawn: vi.fn() };
   scene.hud = { flashBanner: vi.fn() };
   scene.scoring = { onMiss: vi.fn() };
+  scene.advanceGuidedTutorial = vi.fn();
   return scene;
 }
 
@@ -63,6 +64,52 @@ describe("GameScene release-time skill gestures", () => {
     expect(trySolarLance).toHaveBeenCalledTimes(1);
     expect(scene.laser.fire).toHaveBeenCalledTimes(1);
     expect(scene.runSession.recordSkillUse).toHaveBeenCalledWith("solar_lance");
+  });
+
+  it("consumes only Solar Lance charge and preserves Nova Pulse charge", () => {
+    const scene = makeSceneStub();
+    scene.skills = {
+      trySolarLance: vi.fn(() => ({
+        skillId: "solar_lance",
+        judgedHits: [],
+        vfxLine: { a: linePoints[0]!, b: linePoints[1]! },
+      })),
+      tryGravitySlow: vi.fn(),
+    };
+
+    scene.resolveInput(linePoints, earth);
+
+    expect(scene.skillCharges?.get("solar_lance")).toBe(0);
+    expect(scene.skillCharges?.get("nova_pulse")).toBe(100);
+  });
+
+  it("resolves the live Solar Lance snapshot before advancing and clearing guided targets", () => {
+    const scene = makeSceneStub();
+    const order: string[] = [];
+    const guidedTarget = { id: 17 };
+    scene.guidedTutorialFlow = { step: "solar_lance" };
+    scene.guidedScenarioEnemies = vi.fn(() => [guidedTarget]);
+    scene.objects.getAlive.mockImplementation(() => {
+      order.push("snapshot");
+      return [];
+    });
+    scene.applyHits.mockReturnValue([{ hit: { enemyId: guidedTarget.id } }]);
+    scene.advanceGuidedTutorial.mockImplementation(() => {
+      order.push("advance");
+    });
+    scene.skills = {
+      trySolarLance: vi.fn(() => ({
+        skillId: "solar_lance",
+        judgedHits: [],
+        vfxLine: { a: linePoints[0]!, b: linePoints[1]! },
+      })),
+      tryGravitySlow: vi.fn(),
+    };
+
+    scene.resolveInput(linePoints, earth);
+
+    expect(order).toEqual(["snapshot", "advance"]);
+    expect(scene.commitKills.mock.invocationCallOrder[0]).toBeLessThan(scene.advanceGuidedTutorial.mock.invocationCallOrder[0]);
   });
 
   it("fires Gravity Slow from the final gesture even when this stroke already hit an enemy", () => {

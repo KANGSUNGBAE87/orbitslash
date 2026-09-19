@@ -4,6 +4,8 @@ import { LAYER } from "../game/layers";
 interface Burst {
   root: Container;
   ring: Graphics;
+  flash: Graphics;
+  rays: Graphics;
   text: Text;
   age: number;
   lifeMs: number;
@@ -45,16 +47,32 @@ export class HitBurst {
 
     const ring = new Graphics();
     const ringWidth = options.ringWidth ?? (isLastSave ? 5 : 3);
+    const flash = new Graphics();
+    flash.circle(0, 0, radius * 0.22).fill({ color: 0xffffff, alpha: isLastSave ? 0.58 : 0.38 });
+    flash.circle(0, 0, radius * 0.44).fill({ color, alpha: isLastSave ? 0.22 : 0.14 });
+
+    const rays = new Graphics();
+    const count = isLastSave ? 14 : 9;
+    for (let i = 0; i < count; i += 1) {
+      const angle = (i / count) * Math.PI * 2;
+      const inner = radius * 0.44;
+      const outer = radius * (isLastSave ? 1.18 : 0.96);
+      rays.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner)
+        .lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer)
+        .stroke({ width: Math.max(2, ringWidth * 0.6), color: i % 2 === 0 ? color : 0xffffff, alpha: isLastSave ? 0.34 : 0.22, cap: "round" });
+    }
+
     ring.circle(0, 0, radius).stroke({ width: ringWidth, color, alpha: 0.95 });
     ring.circle(0, 0, radius * 0.55).stroke({ width: Math.max(2, ringWidth * 0.45), color: 0xffffff, alpha: isLastSave ? 0.7 : 0.35 });
+    ring.circle(0, 0, radius * 1.22).stroke({ width: Math.max(2, ringWidth * 0.34), color, alpha: isLastSave ? 0.24 : 0.16 });
 
     const text = new Text({ text: label, style: textStyle(color, options.labelScale ?? 1) });
     text.anchor.set(0.5);
     text.position.set(0, -radius - 24);
 
-    root.addChild(ring, text);
+    root.addChild(flash, rays, ring, text);
     this.container.addChild(root);
-    this.bursts.push({ root, ring, text, age: 0, lifeMs: options.lifeMs ?? LIFE_MS, radius, isLastSave });
+    this.bursts.push({ root, ring, flash, rays, text, age: 0, lifeMs: options.lifeMs ?? LIFE_MS, radius, isLastSave });
   }
 
   clear(): void {
@@ -74,6 +92,10 @@ export class HitBurst {
 
       burst.root.alpha = alpha;
       burst.ring.scale.set(ringScale);
+      burst.flash.scale.set(1 + t * (burst.isLastSave ? 0.9 : 0.6));
+      burst.flash.alpha = Math.max(0, 1 - t * 2);
+      burst.rays.scale.set(1 + t * (burst.isLastSave ? 0.72 : 0.46));
+      burst.rays.rotation += dtMs * (burst.isLastSave ? 0.002 : 0.0015);
       burst.text.y = -burst.radius - 24 - t * 42;
     }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { GameScene } from "./GameScene";
+import { RunSession } from "./RunSession";
 import type { EarthRef, HitResult } from "./types";
 
 const earth: EarthRef = { cx: 540, cy: 900, r: 58 };
@@ -63,6 +64,22 @@ describe("GameScene boss integration", () => {
     );
 
     expect(scene.bossRuntime.recordThreatPressure).toHaveBeenCalledWith({ kills: 2, combo: 5, lastSave: true, bossWeakHits: 0 });
+  });
+
+  it("adds an actual commitKills gauge reward to every skill without merging balances", () => {
+    const scene = makeSceneStub();
+    scene.skillCharges.set("solar_lance", 10);
+    scene.skillCharges.set("nova_pulse", 40);
+    scene.scoring.onHit = vi.fn(() => ({ gauge: 12, combo: 1, lastSave: false }));
+
+    scene.commitKills(
+      [{ hit: { enemyId: 1, band: "outer", accuracy: "normal" }, score: 100, type: "basic_meteor", x: 100, y: 100, hitAtMs: 1000 }],
+      earth,
+      true,
+    );
+
+    expect(scene.skillCharges.get("solar_lance")).toBe(22);
+    expect(scene.skillCharges.get("nova_pulse")).toBe(52);
   });
 
   it("records shield-absorbed boss defeats through the same boss runtime path", () => {
@@ -151,6 +168,51 @@ describe("GameScene boss integration", () => {
     expect(scene.runSession.recordHit).not.toHaveBeenCalled();
     expect(scene.hud.flashBanner).toHaveBeenCalledWith(expect.any(String), 0xffc14d);
     expect(scene.hud.flashBlockedWeakPoint).toHaveBeenCalledWith(expect.stringContaining("약점"), expect.stringContaining("큰 피해"));
+  });
+
+  it("reuses the final hit semantic sequence when committing a ranked kill", () => {
+    const scene = makeSceneStub();
+    scene.strokeHitTracker = { recordHit: vi.fn() };
+    const runSession = new RunSession({ difficulty: "rookie", runToken: "server-ranked-run-final-hit", seed: 42 });
+    scene.runSession = runSession;
+    scene.triggerEnemyHitFeedback = vi.fn();
+    scene.removeSprite = vi.fn();
+    scene.objects = {
+      applyDamage: vi.fn(() => ({
+        killed: true,
+        enemy: {
+          id: 5,
+          spawnOrdinal: 9,
+          type: "shard_meteor",
+          angle: 0,
+          radius: 900,
+          angularSpeed: 0,
+          approachSpeed: 0,
+          radiusPx: 64,
+          earthImpactRadiusPx: 10,
+          directional: false,
+          hp: 0,
+          maxHp: 1,
+          damage: 2,
+          score: 35,
+          alive: false,
+        },
+      })),
+    };
+
+    const kills = scene.applyHits(
+      [{ enemyId: 5, band: "outer", accuracy: "normal" }],
+      1,
+      2_000,
+      "slash",
+      { a: { x: 1_400, y: 900, t: 1_984 }, b: { x: 1_500, y: 900, t: 2_000 } },
+    );
+    scene.commitKills(kills, earth, true);
+
+    expect(runSession.replayTraceSnapshot()).toMatchObject({
+      hitEvents: [{ spawnOrdinal: 9, eventSequence: 1 }],
+      killEvents: [{ spawnOrdinal: 9, eventSequence: 1 }],
+    });
   });
 
   it("exposes a deterministic blocked boss body QA preset", () => {

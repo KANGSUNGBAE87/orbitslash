@@ -1,16 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { createRunSummary } from "./RankingSystem";
 import {
+  computeRankedReplayBounds,
   DEFAULT_RANKED_REPLAY_TABLES,
   generateRankedReplaySpawns,
+  generateRankedReplaySpawnsForTrace,
+  validateRankedKillGeometry,
   validateRankedReplaySubmission,
 } from "./RankedReplayValidator";
 import type { RankedReplayTrace } from "./RankedReplayTrace";
-import { createEnemyState, splitSpawnSpecsForEnemy, stepEnemy } from "./Enemy";
 import { ScoringSystem } from "./ScoringSystem";
 import enemiesJson from "../data/enemies.json";
+import difficultyJson from "../data/difficulty.json";
+import orbitsJson from "../data/orbits.json";
 import scoringJson from "../data/scoring.json";
+import skillsJson from "../data/skills.json";
+import wavesJson from "../data/waves.json";
 import type { EnemyTable, ScoringConfig, SpawnSpec, WaveTable } from "./types";
+import { createRankedCoreRulesFromJson, RANKED_CORE_RULES_HASH, RANKED_CORE_SCHEMA_VERSION, replayRankedScore } from "../../shared/ranked-core";
+import { EARTH_CENTER_X, EARTH_CENTER_Y, EARTH_GAMEPLAY_RADIUS, distanceBand } from "./coords";
 
 const enemies = enemiesJson as EnemyTable;
 const scoringConfig = scoringJson as unknown as ScoringConfig;
@@ -86,6 +94,60 @@ function oneKillFixture() {
   return { first, summary, trace };
 }
 
+function twoKillFixture() {
+  const base = {
+    modeId: "ranked" as const,
+    runToken: "server-ranked-run-2",
+    seed: 1234,
+    difficulty: "rookie",
+    survivalMs: 5000,
+    remainingEnergy: 100,
+  };
+  const [first, second] = generateRankedReplaySpawns(base);
+  const hitEvents = [first!, second!].flatMap((spawn) => Array.from({ length: enemies[spawn.enemyType]!.hp }, (_, index) => {
+    const hitAtMs = spawn.spawnAtMs + index + 1;
+    return {
+      spawnOrdinal: spawn.spawnOrdinal!,
+      hitAtMs,
+      band: "outer" as const,
+      accuracy: "normal" as const,
+      damage: 1,
+      source: "slash" as const,
+      segment: hitSegment(spawn, hitAtMs),
+    };
+  }));
+  const killEvents = [first!, second!].map((spawn) => {
+    const killHit = hitEvents.filter((event) => event.spawnOrdinal === spawn.spawnOrdinal).at(-1)!;
+    return { ...killHit };
+  });
+  const typeByOrdinal = new Map([first!, second!].map((spawn) => [spawn.spawnOrdinal!, spawn.enemyType] as const));
+  const scoringSnapshot = replayRankedScore(
+    killEvents.map((kill) => ({
+      spawnOrdinal: kill.spawnOrdinal,
+      enemyType: typeByOrdinal.get(kill.spawnOrdinal)!,
+      hitAtMs: kill.hitAtMs,
+      band: kill.band,
+      accuracy: kill.accuracy,
+    })),
+    [],
+    createRankedCoreRulesFromJson(enemiesJson, difficultyJson, orbitsJson, wavesJson, scoringJson, skillsJson),
+  );
+  const trace: RankedReplayTrace = {
+    hitEvents,
+    killEvents,
+    comboBreakEvents: [],
+    skillEvents: [],
+  };
+  const summary = createRunSummary({
+    ...base,
+    score: scoringSnapshot.score,
+    kills: scoringSnapshot.kills,
+    maxCombo: scoringSnapshot.maxCombo,
+    lastSaveCount: scoringSnapshot.lastSaveCount,
+  });
+  return { first: first!, second: second!, summary, trace };
+}
+
 function spawnEventsFor(spawns: SpawnSpec[]): NonNullable<RankedReplayTrace["spawnEvents"]> {
   return spawns.map((spawn) => ({
     spawnOrdinal: spawn.spawnOrdinal!,
@@ -116,10 +178,60 @@ function tablesWithSingleEnemy(difficulty: "rookie" | "defender" | "elite" | "ma
   };
 }
 
-function enemyAt(spawn: SpawnSpec, hitAtMs: number) {
-  const enemy = createEnemyState(spawn, enemies[spawn.enemyType]!);
-  stepEnemy(enemy, hitAtMs - spawn.spawnAtMs);
-  return enemy;
+function sameMillisecondSequenceFixture(source: "slash" | "solar_lance") {
+  const baseTables = tablesWithSingleEnemy("rookie", "shard_meteor");
+  const tables = {
+    ...baseTables,
+    scoring: {
+      ...scoringConfig,
+      combatGaugeGainMultiplier: 1,
+      gaugeGain: { ...scoringConfig.gaugeGain, shard_meteor: 1, comboKill: 0, lastSave: 0 },
+    },
+    skills: {
+      ...baseTables.skills,
+      solar_lance: { ...baseTables.skills.solar_lance, gaugeCost: 1, cooldownSec: 0 },
+    },
+  };
+  const base = {
+    modeId: "ranked" as const,
+    runToken: `server-ranked-run-sequence-${source}`,
+    seed: 1234,
+    difficulty: "rookie" as const,
+    survivalMs: 5_000,
+    remainingEnergy: 100,
+  };
+  const spawn = generateRankedReplaySpawns(base, tables)[0]!;
+  const hitAtMs = spawn.spawnAtMs + 1;
+  const skillFirst = source === "solar_lance";
+  const hit = Object.assign({
+    spawnOrdinal: spawn.spawnOrdinal!,
+    hitAtMs,
+    band: "outer" as const,
+    accuracy: "normal" as const,
+    damage: source === "solar_lance" ? tables.skills.solar_lance.hitDamage! : 1,
+    source,
+    skillId: source === "solar_lance" ? "solar_lance" as const : undefined,
+    segment: hitSegment(spawn, hitAtMs),
+  }, { eventSequence: skillFirst ? 2 : 1 });
+  const skill = Object.assign(
+    { skillId: "solar_lance" as const, atMs: hitAtMs },
+    { eventSequence: skillFirst ? 1 : 2 },
+  );
+  const trace = {
+    hitEvents: [hit],
+    killEvents: [{ ...hit }],
+    comboBreakEvents: [],
+    skillEvents: [skill],
+  } as RankedReplayTrace;
+  const summary = createRunSummary({
+    ...base,
+    score: enemies.shard_meteor!.score,
+    kills: 1,
+    maxCombo: 1,
+    lastSaveCount: 0,
+    skillUse: { solar_lance: 1 },
+  });
+  return { summary, trace, tables, spawn };
 }
 
 function scoreForKills(events: Array<{ spawnOrdinal: number; band: "outer"; accuracy: "normal"; damageMultiplier?: number }>, typeByOrdinal: Map<number, string>): number {
@@ -144,10 +256,224 @@ function scoreForKills(events: Array<{ spawnOrdinal: number; band: "outer"; accu
 }
 
 describe("RankedReplayValidator", () => {
+  it("applies combat gauge multiplier when estimating ranked skill-use bounds", () => {
+    const baseTables = tablesWithSingleEnemy("rookie", "basic_meteor");
+    const slowGaugeTables = {
+      ...baseTables,
+      scoring: {
+        ...scoringConfig,
+        combatGaugeGainMultiplier: 1,
+        gaugeGain: {
+          ...scoringConfig.gaugeGain,
+          basic_meteor: 10,
+          comboKill: 0,
+          lastSave: 0,
+        },
+      },
+      skills: {
+        ...baseTables.skills,
+        solar_lance: { ...baseTables.skills.solar_lance, gaugeCost: 100, cooldownSec: 0.1 },
+      },
+    };
+    const fastGaugeTables = {
+      ...slowGaugeTables,
+      scoring: { ...slowGaugeTables.scoring, combatGaugeGainMultiplier: 2 },
+    };
+
+    const summary = { difficulty: "rookie" as const, seed: 1234, survivalMs: 5_000 };
+    const slow = computeRankedReplayBounds(summary, slowGaugeTables);
+    const fast = computeRankedReplayBounds(summary, fastGaugeTables);
+
+    expect(fast.maxSkillUse.solar_lance).toBeGreaterThan(slow.maxSkillUse.solar_lance);
+  });
+
+  it("rejects a ranked skill recorded before the replay has earned its gauge", () => {
+    const { summary, trace } = oneKillFixture();
+    const strictTables = {
+      ...DEFAULT_RANKED_REPLAY_TABLES,
+      skills: {
+        ...DEFAULT_RANKED_REPLAY_TABLES.skills,
+        solar_lance: { ...DEFAULT_RANKED_REPLAY_TABLES.skills.solar_lance, gaugeCost: 1, cooldownSec: 10 },
+      },
+    };
+    trace.skillEvents.push({ skillId: "solar_lance", atMs: 0 });
+
+    expect(validateRankedReplaySubmission({ ...summary, skillUse: { ...summary.skillUse, solar_lance: 1 } }, trace, strictTables)).toMatchObject({
+      ok: false,
+      reason: "replay_skill_timeline_invalid",
+    });
+  });
+
+  it("accepts a normal kill before a skill at the same millisecond when global sequence proves the order", () => {
+    const { summary, trace, tables } = sameMillisecondSequenceFixture("slash");
+
+    expect(validateRankedReplaySubmission(summary, trace, tables)).toMatchObject({ ok: true });
+  });
+
+  it("does not let a skill fund itself from its own later same-millisecond kill", () => {
+    const { summary, trace, tables } = sameMillisecondSequenceFixture("solar_lance");
+
+    expect(validateRankedReplaySubmission(summary, trace, tables)).toMatchObject({
+      ok: false,
+      reason: "replay_skill_timeline_invalid",
+    });
+  });
+
+  it("rejects a replay that only partially supplies semantic event sequences", () => {
+    const { summary, trace, tables } = sameMillisecondSequenceFixture("slash");
+    delete (trace.skillEvents[0] as { eventSequence?: number }).eventSequence;
+
+    expect(validateRankedReplaySubmission(summary, trace, tables)).toMatchObject({
+      ok: false,
+      reason: "replay_trace_summary_mismatch",
+    });
+  });
+
+  it("rejects duplicate or non-positive semantic event sequences", () => {
+    for (const invalidSequence of [0, 1]) {
+      const { summary, trace, tables } = sameMillisecondSequenceFixture("slash");
+      (trace.skillEvents[0] as { eventSequence?: number }).eventSequence = invalidSequence;
+
+      expect(validateRankedReplaySubmission(summary, trace, tables)).toMatchObject({
+        ok: false,
+        reason: "replay_trace_summary_mismatch",
+      });
+    }
+  });
+
+  it("requires a kill to reuse its corresponding final hit sequence", () => {
+    const { summary, trace, tables } = sameMillisecondSequenceFixture("slash");
+    (trace.killEvents[0] as { eventSequence?: number }).eventSequence = 3;
+
+    expect(validateRankedReplaySubmission(summary, trace, tables)).toMatchObject({
+      ok: false,
+      reason: "replay_trace_summary_mismatch",
+    });
+  });
+
+  it("keeps conservative skill-before-kill ordering for legacy same-millisecond traces", () => {
+    const { summary, trace, tables } = sameMillisecondSequenceFixture("slash");
+    delete (trace.hitEvents[0] as { eventSequence?: number }).eventSequence;
+    delete (trace.killEvents[0] as { eventSequence?: number }).eventSequence;
+    delete (trace.skillEvents[0] as { eventSequence?: number }).eventSequence;
+
+    expect(validateRankedReplaySubmission(summary, trace, tables)).toMatchObject({
+      ok: false,
+      reason: "replay_skill_timeline_invalid",
+    });
+  });
+
+  it("rejects sequenced semantic timestamps that move backward and a future skill source for an earlier hit", () => {
+    const { summary, trace, tables, spawn } = sameMillisecondSequenceFixture("solar_lance");
+    trace.skillEvents[0]!.atMs = trace.hitEvents[0]!.hitAtMs + 50;
+
+    expect(validateRankedReplaySubmission(summary, trace, tables)).toMatchObject({
+      ok: false,
+      reason: "replay_trace_summary_mismatch",
+    });
+    expect(validateRankedKillGeometry(
+      trace.hitEvents[0]!,
+      spawn,
+      summary.difficulty,
+      tables,
+      trace.skillEvents,
+      enemies.shard_meteor!.hp,
+      true,
+    )).toEqual({ ok: false, reason: "replay_trace_invalid_geometry" });
+  });
+
+  it("rejects a ranked skill replayed before its own cooldown expires", () => {
+    const { first, second, summary, trace } = twoKillFixture();
+    const strictTables = {
+      ...DEFAULT_RANKED_REPLAY_TABLES,
+      scoring: {
+        ...scoringConfig,
+        combatGaugeGainMultiplier: 1,
+        gaugeGain: {
+          ...scoringConfig.gaugeGain,
+          [first.enemyType]: 1,
+          [second.enemyType]: 1,
+        },
+      },
+      skills: {
+        ...DEFAULT_RANKED_REPLAY_TABLES.skills,
+        solar_lance: { ...DEFAULT_RANKED_REPLAY_TABLES.skills.solar_lance, gaugeCost: 1, cooldownSec: 1 },
+      },
+    };
+    const afterFirstKill = trace.killEvents[0]!.hitAtMs + 1;
+    const afterSecondKill = trace.killEvents[1]!.hitAtMs + 1;
+    expect(afterSecondKill - afterFirstKill).toBeLessThan(1_000);
+    trace.skillEvents.push({ skillId: "solar_lance", atMs: afterFirstKill });
+    trace.skillEvents.push({ skillId: "solar_lance", atMs: afterSecondKill });
+
+    expect(validateRankedReplaySubmission({ ...summary, skillUse: { ...summary.skillUse, solar_lance: 2 } }, trace, strictTables)).toMatchObject({
+      ok: false,
+      reason: "replay_skill_timeline_invalid",
+    });
+    const noCooldownTables = {
+      ...strictTables,
+      skills: {
+        ...strictTables.skills,
+        solar_lance: { ...strictTables.skills.solar_lance, cooldownSec: 0 },
+      },
+    };
+    expect(validateRankedReplaySubmission(
+      { ...summary, skillUse: { ...summary.skillUse, solar_lance: 2 } },
+      trace,
+      noCooldownTables,
+    )).toMatchObject({ ok: true });
+  });
+
+  it("accepts different ranked skills funded by the same kill reward", () => {
+    const { first, summary, trace } = oneKillFixture();
+    const sharedReward = 80;
+    const independentChargeTables = {
+      ...DEFAULT_RANKED_REPLAY_TABLES,
+      scoring: {
+        ...scoringConfig,
+        combatGaugeGainMultiplier: 1,
+        gaugeGain: { ...scoringConfig.gaugeGain, [first.enemyType]: sharedReward },
+      },
+      skills: {
+        ...DEFAULT_RANKED_REPLAY_TABLES.skills,
+        solar_lance: { ...DEFAULT_RANKED_REPLAY_TABLES.skills.solar_lance, gaugeCost: sharedReward, cooldownSec: 10 },
+        nova_pulse: { ...DEFAULT_RANKED_REPLAY_TABLES.skills.nova_pulse, gaugeCost: sharedReward, cooldownSec: 10 },
+      },
+    };
+    const afterFirstKill = trace.killEvents[0]!.hitAtMs + 1;
+    trace.skillEvents.push({ skillId: "solar_lance", atMs: afterFirstKill });
+    trace.skillEvents.push({ skillId: "nova_pulse", atMs: afterFirstKill + 1 });
+
+    expect(validateRankedReplaySubmission({
+      ...summary,
+      skillUse: { ...summary.skillUse, solar_lance: 1, nova_pulse: 1 },
+    }, trace, independentChargeTables)).toMatchObject({ ok: true });
+  });
+
   it("accepts a ranked semantic trace that replays to the submitted summary", () => {
     const { summary, trace } = oneKillFixture();
 
     expect(validateRankedReplaySubmission(summary, trace)).toMatchObject({ ok: true });
+  });
+
+  it("rejects an expected ranked rules contract that differs before replay validation", () => {
+    const { summary, trace } = oneKillFixture();
+    const validateWithExpectedRules = validateRankedReplaySubmission as unknown as (
+      summary: Parameters<typeof validateRankedReplaySubmission>[0],
+      trace: RankedReplayTrace,
+      tables: undefined,
+      maxSurvivalMs: undefined,
+      expectedRules: { rulesHash?: string; rulesVersion?: number },
+    ) => ReturnType<typeof validateRankedReplaySubmission>;
+
+    expect(validateWithExpectedRules(summary, trace, undefined, undefined, {
+      rulesHash: "stale-ranked-rules",
+      rulesVersion: RANKED_CORE_SCHEMA_VERSION,
+    })).toMatchObject({ ok: false, reason: "ranked_rules_mismatch" });
+    expect(validateWithExpectedRules(summary, trace, undefined, undefined, {
+      rulesHash: RANKED_CORE_RULES_HASH,
+      rulesVersion: RANKED_CORE_SCHEMA_VERSION,
+    })).toMatchObject({ ok: true });
   });
 
   it("rejects public ranked validation when replay trace is missing", () => {
@@ -361,6 +687,95 @@ describe("RankedReplayValidator", () => {
     });
   });
 
+  it("matches Edge locked-body and current-phase weak-point replay geometry", () => {
+    const spawn = {
+      spawnOrdinal: 1,
+      enemyType: "ringed_destroyer",
+      spawnAtMs: 0,
+      startAngleRad: 0,
+      startRadius: 900,
+      angularSpeed: 0,
+      approachSpeed: 0,
+    } as SpawnSpec;
+    const bodySegment = { a: { x: 1410, y: 900, t: 0 }, b: { x: 1470, y: 900, t: 1 } };
+
+    expect(validateRankedKillGeometry({
+      spawnOrdinal: 1,
+      hitAtMs: 1,
+      band: "outer",
+      accuracy: "normal",
+      damage: 1,
+      source: "slash",
+      segment: bodySegment,
+    }, spawn, "rookie", DEFAULT_RANKED_REPLAY_TABLES, [], 58, true)).toEqual({
+      ok: false,
+      reason: "replay_trace_invalid_geometry",
+    });
+
+    expect(validateRankedKillGeometry({
+      spawnOrdinal: 1,
+      hitAtMs: 1,
+      band: "outer",
+      accuracy: "bossWeak",
+      damage: 2,
+      damageMultiplier: 1.45,
+      source: "slash",
+      segment: { a: { x: 1530, y: 1021, t: 0 }, b: { x: 1590, y: 1021, t: 1 } },
+    }, spawn, "rookie", DEFAULT_RANKED_REPLAY_TABLES, [], 58, true)).toEqual({
+      ok: true,
+      damageMultiplier: 1.45,
+    });
+  });
+
+  it("accepts GameScene's exact zone boundaries for every ranked difficulty", () => {
+    const zones = DEFAULT_RANKED_REPLAY_TABLES.difficulty.zones;
+
+    for (const difficulty of ["rookie", "defender", "elite", "master"] as const) {
+      for (const radius of [
+        zones.outer * EARTH_GAMEPLAY_RADIUS - 0.01,
+        zones.outer * EARTH_GAMEPLAY_RADIUS,
+        zones.mid * EARTH_GAMEPLAY_RADIUS - 0.01,
+        zones.mid * EARTH_GAMEPLAY_RADIUS,
+        zones.danger * EARTH_GAMEPLAY_RADIUS - 0.01,
+        zones.danger * EARTH_GAMEPLAY_RADIUS,
+        zones.lastSave * EARTH_GAMEPLAY_RADIUS - 0.01,
+        zones.lastSave * EARTH_GAMEPLAY_RADIUS,
+      ]) {
+        const band = distanceBand(radius, EARTH_GAMEPLAY_RADIUS, zones);
+        const spawn = {
+          spawnOrdinal: 1,
+          enemyType: "shard_meteor",
+          spawnAtMs: 0,
+          startAngleRad: 0,
+          startRadius: radius,
+          angularSpeed: 0,
+          approachSpeed: 0,
+        } as SpawnSpec;
+        const event = {
+          spawnOrdinal: 1,
+          hitAtMs: 1,
+          band,
+          accuracy: "normal" as const,
+          damage: 1,
+          source: "slash" as const,
+          segment: {
+            a: { x: EARTH_CENTER_X + radius - 40, y: EARTH_CENTER_Y, t: 0 },
+            b: { x: EARTH_CENTER_X + radius + 40, y: EARTH_CENTER_Y, t: 1 },
+          },
+        };
+
+        expect(validateRankedKillGeometry(event, spawn, difficulty, DEFAULT_RANKED_REPLAY_TABLES, [], 1, true)).toEqual({
+          ok: true,
+          damageMultiplier: 1,
+        });
+        expect(validateRankedKillGeometry({ ...event, band: band === "outer" ? "mid" : "outer" }, spawn, difficulty, DEFAULT_RANKED_REPLAY_TABLES, [], 1, true)).toEqual({
+          ok: false,
+          reason: "replay_trace_summary_mismatch",
+        });
+      }
+    }
+  });
+
   it("rejects boss shard spawn events with an enemy type outside the parent boss pattern", () => {
     const base = {
       modeId: "ranked" as const,
@@ -531,10 +946,6 @@ describe("RankedReplayValidator", () => {
     const parent = baseSpawns.find((spawn) => spawn.enemyType === "ice_comet")!;
     expect(parent).toBeTruthy();
 
-    const parentKillAtMs = parent.spawnAtMs + enemies.ice_comet!.hp + 20;
-    const split = splitSpawnSpecsForEnemy(enemyAt(parent, parentKillAtMs), parentKillAtMs)[0]!;
-    const splitWithOrdinal: SpawnSpec = { ...split, spawnOrdinal: Math.max(...baseSpawns.map((spawn) => spawn.spawnOrdinal ?? 0)) + 1 };
-    const splitKillAtMs = splitWithOrdinal.spawnAtMs + 20;
     const parentHits = Array.from({ length: enemies.ice_comet!.hp }, (_, index) => {
       const hitAtMs = parent.spawnAtMs + index + 21;
       return {
@@ -548,18 +959,28 @@ describe("RankedReplayValidator", () => {
       };
     });
     const parentKill = parentHits[parentHits.length - 1]!;
+    const derived = generateRankedReplaySpawnsForTrace(base, {
+      hitEvents: [],
+      killEvents: [parentKill],
+      comboBreakEvents: [],
+      skillEvents: [],
+    }, tables);
+    expect(derived).toMatchObject({ ok: true });
+    const splitWithOrdinal = derived.ok ? derived.spawns.find((spawn) => spawn.source === "split" && spawn.parentSpawnOrdinal === parent.spawnOrdinal)! : undefined;
+    expect(splitWithOrdinal).toBeTruthy();
+    const splitKillAtMs = splitWithOrdinal!.spawnAtMs + 20;
     const splitHit = {
-      spawnOrdinal: splitWithOrdinal.spawnOrdinal!,
+      spawnOrdinal: splitWithOrdinal!.spawnOrdinal!,
       hitAtMs: splitKillAtMs,
       band: "outer" as const,
       accuracy: "normal" as const,
       damage: 1,
       source: "slash" as const,
-      segment: hitSegment(splitWithOrdinal, splitKillAtMs),
+      segment: hitSegment(splitWithOrdinal!, splitKillAtMs),
     };
     const typeByOrdinal = new Map([
       [parent.spawnOrdinal!, parent.enemyType],
-      [splitWithOrdinal.spawnOrdinal!, splitWithOrdinal.enemyType],
+      [splitWithOrdinal!.spawnOrdinal!, splitWithOrdinal!.enemyType],
     ]);
     const summary = createRunSummary({
       ...base,
@@ -569,20 +990,17 @@ describe("RankedReplayValidator", () => {
       lastSaveCount: 0,
     });
     const trace: RankedReplayTrace = {
-      spawnEvents: [
-        ...spawnEventsFor(baseSpawns),
-        {
-          spawnOrdinal: splitWithOrdinal.spawnOrdinal!,
-          parentSpawnOrdinal: parent.spawnOrdinal!,
-          source: "split",
-          enemyType: splitWithOrdinal.enemyType,
-          spawnAtMs: splitWithOrdinal.spawnAtMs,
-          startAngleRad: splitWithOrdinal.startAngleRad,
-          startRadius: splitWithOrdinal.startRadius,
-          angularSpeed: splitWithOrdinal.angularSpeed,
-          approachSpeed: splitWithOrdinal.approachSpeed,
-        },
-      ],
+      spawnEvents: derived.ok ? derived.spawns.map((spawn) => ({
+        spawnOrdinal: spawn.spawnOrdinal!,
+        parentSpawnOrdinal: spawn.parentSpawnOrdinal,
+        source: spawn.source ?? (enemies[spawn.enemyType]?.boss ? "boss" : "wave"),
+        enemyType: spawn.enemyType,
+        spawnAtMs: spawn.spawnAtMs,
+        startAngleRad: spawn.startAngleRad,
+        startRadius: spawn.startRadius,
+        angularSpeed: spawn.angularSpeed,
+        approachSpeed: spawn.approachSpeed,
+      })) : [],
       hitEvents: [...parentHits, splitHit],
       killEvents: [
         {

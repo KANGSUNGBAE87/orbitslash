@@ -18,6 +18,10 @@ export class WebStubAdapter implements IPlatformAdapter {
     return { userId: "local-dev", provider: "web-stub" };
   }
 
+  async getVerifiedSessionAccessToken(): Promise<string | null> {
+    return null;
+  }
+
   telemetryContext(): PlatformTelemetryContext {
     return { runtime: "web_stub" };
   }

@@ -68,4 +68,15 @@ describe("GameScene pointer input", () => {
     expect(scene.gesture.onPointerMove).toHaveBeenCalledTimes(1);
     expect(scene.resolveInput).toHaveBeenCalledTimes(1);
   });
+
+  it("cancels an active stroke when the app backgrounds", () => {
+    const scene = makeSceneStub();
+    scene.onPointerDown(pointerEvent(1, 100, 100));
+
+    scene.cancelActivePointer();
+
+    expect(scene.activePointerId).toBeNull();
+    expect(scene.livePoints).toEqual([]);
+    expect(scene.slashTrail.setLive).toHaveBeenLastCalledWith([]);
+  });
 });

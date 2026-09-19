@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { LocalBackendAdapter } from "./BackendAdapter";
 import { createDefaultBackendAdapter } from "./BackendAdapterFactory";
 import { SupabaseEdgeBackendAdapter } from "./SupabaseEdgeBackendAdapter";
@@ -15,6 +15,22 @@ describe("createDefaultBackendAdapter", () => {
     });
 
     expect(adapter).toBeInstanceOf(SupabaseEdgeBackendAdapter);
+  });
+
+  it("keeps friend challenge disabled until remote and liveops evidence flags are both explicit", async () => {
+    const fetchMock = vi.fn() as unknown as typeof fetch;
+    const adapter = createDefaultBackendAdapter({
+      VITE_SUPABASE_URL: "https://example.supabase.co/",
+      VITE_SUPABASE_ANON_KEY: "anon-key",
+      VITE_FRIEND_CHALLENGE_REMOTE_ENABLED: "true",
+      fetch: fetchMock,
+    });
+
+    await expect(adapter.createFriendChallenge({ seed: 1, difficulty: "rookie", rulesHash: "rules-1", rulesVersion: 1, configVersion: "config-1", expiresAt: "2026-08-01T00:00:00.000Z" })).resolves.toEqual({
+      accepted: false,
+      reason: "friend_challenge_remote_not_enabled",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("keeps the default Supabase ad telemetry endpoint in local-draft mode until explicitly enabled", async () => {

@@ -150,4 +150,13 @@ describe("GameScene RunConfig integration", () => {
     expect(freeDefense.movementDtForEnemy(target, 1000, alive)).toBeGreaterThan(1000);
     expect(freeDefense.movementDtForEnemy(graviton, 1000, alive)).toBe(1000);
   });
+
+  it("suppresses time-based visual effects when reduced motion is requested", () => {
+    const scene = new GameScene(buildRunConfig("freeDefense"), { showResultOverlay: false, reducedMotion: true } as never);
+
+    expect((scene as any).slashTrail.container.visible).toBe(false);
+    expect((scene as any).laser.container.visible).toBe(false);
+    expect((scene as any).destructionBurst.container.visible).toBe(false);
+    expect((scene as any).hitBurst.container.visible).toBe(false);
+  });
 });

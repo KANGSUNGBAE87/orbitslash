@@ -44,6 +44,11 @@ export function applyUnlockRules(input: {
   if (totalKills >= 80 || result.modeId === "blitz60") addUnique(unlocks.modes, "blitz60");
   if (totalBossKills >= 1 || (result.bossKills ?? 0) > 0) {
     addUnique(unlocks.modes, "bossRush");
+    addUnique(unlocks.modes, "ranked");
+    addUnique(unlocks.skills, "nova_pulse");
+  }
+  if (result.modeId === "story" && result.objectiveOutcome === "cleared" && result.activeStoryStageId === "story-8") {
+    addUnique(unlocks.modes, "ranked");
     addUnique(unlocks.skills, "nova_pulse");
   }
   if (result.modeId === "daily" || totalBossKills >= 1) addUnique(unlocks.modes, "daily");

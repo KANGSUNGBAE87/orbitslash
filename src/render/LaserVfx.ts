@@ -37,9 +37,26 @@ export class LaserVfx {
     for (const b of this.beams) {
       const a = 1 - b.age / BEAM_LIFE_MS;
       const { a: p0, b: p1 } = b.seg;
-      this.g.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).stroke({ width: SOLAR_LANCE_VFX_WIDTH_PX, color: 0xff9a2e, alpha: a * 0.16, cap: "round" });
-      this.g.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).stroke({ width: SOLAR_LANCE_VFX_WIDTH_PX * 0.45, color: 0xffc14d, alpha: a * 0.34, cap: "round" });
-      this.g.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).stroke({ width: 18, color: 0xffffff, alpha: a * 0.92, cap: "round" });
+      const dx = p1.x - p0.x;
+      const dy = p1.y - p0.y;
+      const len = Math.max(1, Math.hypot(dx, dy));
+      const nx = -dy / len;
+      const ny = dx / len;
+      this.g.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).stroke({ width: SOLAR_LANCE_VFX_WIDTH_PX * 1.18, color: 0xff6b2e, alpha: a * 0.1, cap: "round" });
+      this.g.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).stroke({ width: SOLAR_LANCE_VFX_WIDTH_PX * 0.68, color: 0xff9a2e, alpha: a * 0.2, cap: "round" });
+      this.g.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).stroke({ width: SOLAR_LANCE_VFX_WIDTH_PX * 0.34, color: 0xffc14d, alpha: a * 0.46, cap: "round" });
+      this.g.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).stroke({ width: 16, color: 0xffffff, alpha: a * 0.94, cap: "round" });
+      for (let i = 0; i <= 6; i += 1) {
+        const t = i / 6;
+        const x = p0.x + dx * t;
+        const y = p0.y + dy * t;
+        const offset = (i % 2 === 0 ? 1 : -1) * SOLAR_LANCE_VFX_WIDTH_PX * 0.28;
+        this.g.moveTo(x + nx * offset, y + ny * offset)
+          .lineTo(x - nx * offset * 0.34, y - ny * offset * 0.34)
+          .stroke({ width: 4, color: i % 2 === 0 ? 0xfff3c4 : 0xff9a2e, alpha: a * 0.34, cap: "round" });
+      }
+      this.g.circle(p0.x, p0.y, SOLAR_LANCE_VFX_WIDTH_PX * 0.2).fill({ color: 0xffc14d, alpha: a * 0.22 });
+      this.g.circle(p1.x, p1.y, SOLAR_LANCE_VFX_WIDTH_PX * 0.2).fill({ color: 0xffffff, alpha: a * 0.24 });
     }
   }
 }

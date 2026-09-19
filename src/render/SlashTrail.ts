@@ -51,10 +51,16 @@ export class SlashTrail {
     if (pts.length < 2) return;
     g.moveTo(pts[0]!.x, pts[0]!.y);
     for (let i = 1; i < pts.length; i++) g.lineTo(pts[i]!.x, pts[i]!.y);
+    g.stroke({ width: 24, color: TRAIL_COLOR, alpha: alpha * 0.14, cap: "round", join: "round" });
+    g.moveTo(pts[0]!.x, pts[0]!.y);
+    for (let i = 1; i < pts.length; i++) g.lineTo(pts[i]!.x, pts[i]!.y);
     g.stroke({ width: 10, color: TRAIL_COLOR, alpha: alpha * 0.9, cap: "round", join: "round" });
     g.moveTo(pts[0]!.x, pts[0]!.y);
     for (let i = 1; i < pts.length; i++) g.lineTo(pts[i]!.x, pts[i]!.y);
     g.stroke({ width: 3, color: 0xffffff, alpha: alpha, cap: "round", join: "round" });
+    const end = pts[pts.length - 1]!;
+    g.circle(end.x, end.y, 9).fill({ color: 0xffffff, alpha: alpha * 0.36 });
+    g.circle(end.x, end.y, 20).stroke({ width: 3, color: TRAIL_COLOR, alpha: alpha * 0.28 });
   }
 
   private redrawLive(): void {

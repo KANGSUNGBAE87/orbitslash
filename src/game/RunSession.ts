@@ -35,12 +35,16 @@ export interface RunFinishInput {
 export class RunSession {
   private skillUse: Partial<Record<SkillId, number>> = {};
   private replayTrace: RankedReplayTrace = emptyRankedReplayTrace();
+  private nextSemanticEventSequence = 1;
+  private latestHitSequenceBySpawnOrdinal = new Map<number, number>();
 
   constructor(private readonly start: RunSessionStart) {}
 
-  recordSkillUse(skillId: SkillId, atMs = 0): void {
+  recordSkillUse(skillId: SkillId, atMs = 0): number {
+    const eventSequence = this.issueSemanticEventSequence();
     this.skillUse[skillId] = (this.skillUse[skillId] ?? 0) + 1;
-    this.replayTrace.skillEvents.push({ skillId, atMs: Math.max(0, atMs) });
+    this.replayTrace.skillEvents.push({ skillId, atMs: Math.max(0, atMs), eventSequence });
+    return eventSequence;
   }
 
   recordSpawn(event: RankedReplaySpawnEvent): void {
@@ -48,12 +52,21 @@ export class RunSession {
     this.replayTrace.spawnEvents.push({ ...event });
   }
 
-  recordHit(event: RankedReplayHitEvent): void {
-    this.replayTrace.hitEvents.push(cloneHitEvent(event));
+  recordHit(event: RankedReplayHitEvent): number {
+    const eventSequence = this.issueSemanticEventSequence();
+    this.replayTrace.hitEvents.push(cloneHitEvent({ ...event, eventSequence }));
+    this.latestHitSequenceBySpawnOrdinal.set(event.spawnOrdinal, eventSequence);
+    return eventSequence;
   }
 
-  recordKill(event: RankedReplayKillEvent): void {
-    this.replayTrace.killEvents.push(cloneKillEvent(event));
+  recordKill(event: Omit<RankedReplayKillEvent, "eventSequence">): number {
+    const eventSequence = this.latestHitSequenceBySpawnOrdinal.get(event.spawnOrdinal);
+    if (eventSequence == null) {
+      throw new Error(`Replay kill for spawn ${event.spawnOrdinal} requires a recorded hit`);
+    }
+    this.replayTrace.killEvents.push(cloneKillEvent({ ...event, eventSequence }));
+    this.latestHitSequenceBySpawnOrdinal.delete(event.spawnOrdinal);
+    return eventSequence;
   }
 
   recordComboBreak(reason: "miss" | "earth_hit", atMs = 0): void {
@@ -80,6 +93,12 @@ export class RunSession {
       ...input,
       skillUse: this.skillUse,
     });
+  }
+
+  private issueSemanticEventSequence(): number {
+    const eventSequence = this.nextSemanticEventSequence;
+    this.nextSemanticEventSequence += 1;
+    return eventSequence;
   }
 }
 

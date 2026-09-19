@@ -1,0 +1,7 @@
+{
+  "items": [
+    { "id": "earth_aurora", "slot": "earth", "product": "supporter_pack" },
+    { "id": "slash_comet", "slot": "slash", "product": "supporter_pack" },
+    { "id": "boss_nebula", "slot": "boss", "product": "supporter_pack" }
+  ]
+}

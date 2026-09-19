@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { buildModeProgressSummary, canStartFreeDefenseRun, FREE_DEFENSE_DAILY_PLAY_LIMIT, ProgressStore } from "./ProgressStore";
 import { WebStubAdapter } from "../platform/WebStubAdapter";
+import { reduceFirstSession } from "./onboarding/FirstSessionState";
 
 describe("ProgressStore", () => {
+  it("replaces a locally merged snapshot without requiring a completed run", async () => {
+    const adapter = new WebStubAdapter();
+    const store = new ProgressStore(adapter);
+    const snapshot = await store.load();
+
+    await store.replace({ ...snapshot, profile: { ...snapshot.profile, totalRuns: 7 } });
+
+    await expect(store.load()).resolves.toMatchObject({ profile: { totalRuns: 7 } });
+  });
+
   it("persists best score and survival per mode through the platform storage adapter", async () => {
     const adapter = new WebStubAdapter();
     const store = new ProgressStore(adapter);
@@ -41,6 +52,62 @@ describe("ProgressStore", () => {
     });
     expect(snapshot.profile.totalRuns).toBe(2);
     expect(snapshot.profile.totalKills).toBe(12);
+  });
+
+  it("injects the record time so Free Defense daily progress is deterministic", async () => {
+    const adapter = new WebStubAdapter();
+    const store = new ProgressStore(adapter, () => new Date("2031-02-03T12:00:00.000Z"));
+
+    const outcome = await store.recordResult({
+      modeId: "freeDefense",
+      difficulty: "rookie",
+      endReason: "earth_destroyed",
+      survivalMs: 1000,
+      score: 100,
+      kills: 1,
+      maxCombo: 1,
+      remainingEnergy: 0,
+      rankingEligible: false,
+      retryDestination: "sameRun",
+    });
+
+    expect(outcome.snapshot.freeDefense).toMatchObject({ dailyPlayDate: "2031-02-03", dailyPlayCount: 1 });
+  });
+
+  it("persists an idempotent current-week title claim", async () => {
+    const adapter = new WebStubAdapter();
+    const store = new ProgressStore(adapter, () => new Date("2031-02-08T03:00:00.000Z"));
+    const snapshot = await store.load();
+    await store.replace({
+      ...snapshot,
+      retention: {
+        ...snapshot.retention,
+        daily: {
+          ...snapshot.retention.daily,
+          clearDayKeys: ["2031-02-03", "2031-02-04", "2031-02-05", "2031-02-06", "2031-02-07"],
+        },
+      },
+    });
+
+    const first = await store.claimWeeklyReward();
+    const second = await store.claimWeeklyReward();
+
+    expect(first).toMatchObject({ claimed: true, titleId: "weekly_five_day", weekKey: "2031-02-03" });
+    expect(second).toMatchObject({ claimed: false, weekKey: "2031-02-03" });
+    await expect(store.load()).resolves.toMatchObject({
+      collection: { titles: ["weekly_five_day"] },
+      retention: { claimedWeeklyKeys: ["2031-02-03"] },
+    });
+  });
+
+  it("persists the resumable first-session step without storing combat state", async () => {
+    const adapter = new WebStubAdapter();
+    const store = new ProgressStore(adapter);
+    const state = reduceFirstSession((await store.load()).onboarding, { type: "slash_committed" }, "2031-02-03T10:00:00.000Z");
+
+    await store.saveOnboarding(state);
+
+    expect((await store.load()).onboarding).toMatchObject({ step: "last_save", startedAt: "2031-02-03T10:00:00.000Z" });
   });
 
   it("unlocks boss rush and nova pulse after the first boss kill while preserving collection codex", async () => {
@@ -108,7 +175,7 @@ describe("ProgressStore", () => {
       retryDestination: "sameRun",
     });
 
-    expect(after.records.freeDefense?.bestBossKills).toBe(0);
+    expect(after.snapshot.records.freeDefense?.bestBossKills).toBe(0);
   });
 
   it("builds mode card progress summaries from unlocks and records", async () => {

@@ -49,3 +49,25 @@ describe("SkillSystem gravity_slow", () => {
     expect(system.tryGravitySlow(circleGesture({ startEndGapRatio: 0.31 }), { earth, gauge: 100, screenShortSide: 1080 })).toBeNull();
   });
 });
+
+describe("SkillSystem cooldown control", () => {
+  it("resets only the requested skill cooldown", () => {
+    const system = new SkillSystem(skills);
+    const line: GestureResult = {
+      kind: "line",
+      points: [{ x: 120, y: 900, t: 0 }, { x: 960, y: 900, t: 100 }],
+      straightness: 1,
+      totalTurnRad: 0,
+      enclosesEarth: false,
+      vertexCount: 0,
+      startEndGapRatio: 1,
+    };
+    expect(system.trySolarLance(line, { earth, gauge: 100, screenShortSide: 1080 })).not.toBeNull();
+    expect(system.cooldownRemaining("solar_lance")).toBeGreaterThan(0);
+
+    system.resetCooldown("solar_lance");
+
+    expect(system.cooldownRemaining("solar_lance")).toBe(0);
+    expect(system.isReady("solar_lance")).toBe(true);
+  });
+});

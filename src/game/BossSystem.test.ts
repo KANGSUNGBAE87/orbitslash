@@ -10,6 +10,20 @@ import {
 } from "./BossSystem";
 
 describe("BossEncounterRuntime", () => {
+  it("defers an overdue periodic boss without activating it", () => {
+    const runtime = new BossEncounterRuntime({
+      enabled: true,
+      bossEveryMs: 60_000,
+      bossEnemyType: "eclipse_core",
+    });
+
+    runtime.deferUntil(60_000);
+
+    expect(runtime.nextSpawns(60_000, false)).toEqual([]);
+    expect(runtime.nextSpawns(119_999, false)).toEqual([]);
+    expect(runtime.nextSpawns(120_000, false)).toEqual([{ enemyType: "eclipse_core", spawnAtMs: 120_000 }]);
+  });
+
   it("starts boss rush with a sequence boss and waits for defeat before the next boss", () => {
     const runtime = new BossEncounterRuntime({
       enabled: true,

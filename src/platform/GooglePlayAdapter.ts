@@ -4,20 +4,14 @@ import type {
   IPlatformAdapter,
   PlatformAnalyticsEvent,
   PlatformTelemetryContext,
+  PurchaseRestoreResult,
   PurchaseResult,
   RewardedAdCapability,
+  SafeAreaInsets,
 } from "./PlatformAdapter";
+import type { GooglePlayBridgeContract } from "./google-play/GooglePlayBridge";
 
-export interface GooglePlayBridge {
-  login?: () => Promise<{ internalUserId: string }>;
-  rewardedAdCapability?: () => Promise<RewardedAdCapability>;
-  showRewardedAd?: () => Promise<AdResult>;
-  purchase?: (productId: string) => Promise<PurchaseResult>;
-  storageGet?: (key: string) => Promise<string | null>;
-  storageSet?: (key: string, value: string) => Promise<void>;
-  haptic?: (kind: "light" | "medium" | "heavy") => void;
-  trackAnalyticsEvent?: (event: PlatformAnalyticsEvent) => Promise<void>;
-}
+export type GooglePlayBridge = GooglePlayBridgeContract;
 
 export class GooglePlayAdapter implements IPlatformAdapter {
   private readonly mem = new Map<string, string>();
@@ -30,6 +24,10 @@ export class GooglePlayAdapter implements IPlatformAdapter {
       userId: result?.internalUserId ?? "google-play-anonymous",
       provider: "google_play",
     };
+  }
+
+  async getVerifiedSessionAccessToken(): Promise<string | null> {
+    return this.bridge.getVerifiedSessionAccessToken?.() ?? null;
   }
 
   telemetryContext(): PlatformTelemetryContext {
@@ -56,6 +54,10 @@ export class GooglePlayAdapter implements IPlatformAdapter {
     return (await this.bridge.purchase?.(productId)) ?? { success: false, productId, reason: "platform_not_supported" };
   }
 
+  async restorePurchases(): Promise<PurchaseRestoreResult> {
+    return (await this.bridge.restorePurchases?.()) ?? { supported: false, productIds: [] };
+  }
+
   async storageGet(key: string): Promise<string | null> {
     if (this.bridge.storageGet) return this.bridge.storageGet(key);
     return this.mem.get(key) ?? null;
@@ -71,6 +73,14 @@ export class GooglePlayAdapter implements IPlatformAdapter {
 
   haptic(kind: "light" | "medium" | "heavy"): void {
     this.bridge.haptic?.(kind);
+  }
+
+  async safeAreaInsets(): Promise<SafeAreaInsets> {
+    return (await this.bridge.safeAreaInsets?.()) ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  }
+
+  async subscribeLifecycle(listener: (event: "background" | "foreground") => void): Promise<() => Promise<void>> {
+    return (await this.bridge.subscribeLifecycle?.(listener)) ?? (async () => undefined);
   }
 
   async trackAnalyticsEvent(event: PlatformAnalyticsEvent): Promise<void> {

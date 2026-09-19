@@ -1,5 +1,7 @@
 import { AppsInTossAdapter, type AppsInTossBridge } from "./AppsInTossAdapter";
 import { GooglePlayAdapter, type GooglePlayBridge } from "./GooglePlayAdapter";
+import { detectAppsInTossBridge } from "./apps-in-toss/AppsInTossBridge";
+import { detectGooglePlayBridge } from "./google-play/GooglePlayBridge";
 import type { IPlatformAdapter } from "./PlatformAdapter";
 import { WebStubAdapter } from "./WebStubAdapter";
 
@@ -40,7 +42,7 @@ function defaultPlatformRuntime(): PlatformRuntime {
     __ORBITSLASH_GOOGLE_PLAY_BRIDGE__?: GooglePlayBridge;
   };
   return {
-    appsInTossBridge: candidate.__ORBITSLASH_APPS_IN_TOSS_BRIDGE__,
-    googlePlayBridge: candidate.__ORBITSLASH_GOOGLE_PLAY_BRIDGE__,
+    appsInTossBridge: candidate.__ORBITSLASH_APPS_IN_TOSS_BRIDGE__ ?? detectAppsInTossBridge(),
+    googlePlayBridge: candidate.__ORBITSLASH_GOOGLE_PLAY_BRIDGE__ ?? detectGooglePlayBridge(),
   };
 }

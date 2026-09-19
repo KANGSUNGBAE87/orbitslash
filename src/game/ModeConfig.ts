@@ -1,4 +1,6 @@
 import { BOSS_IDS, type BossId } from "./BossDefinitions";
+import { effectiveSkills } from "./progression/PlayerSkillAccess";
+import type { AppRunSource } from "./AppState";
 
 export const MODE_IDS = ["story", "freeDefense", "ranked", "bossRush", "blitz60", "daily"] as const;
 
@@ -518,6 +520,8 @@ export interface BuildRunConfigOptions {
   freeDefensePreset?: FreeDefensePresetId;
   practiceBossId?: BossId;
   storyStageId?: StoryStageId;
+  unlockedSkills?: SkillId[];
+  source?: AppRunSource;
 }
 
 export function seedPolicyForMode(modeId: ModeId): SeedPolicy {
@@ -547,6 +551,9 @@ export function buildRunConfig(modeId: ModeId, options: BuildRunConfigOptions = 
   }
   if (modeId === "ranked") {
     rules.rankingEligible = configVersion.startsWith("server-ranked-");
+  }
+  if (options.unlockedSkills) {
+    rules.enabledSkills = effectiveSkills(rules.enabledSkills, options.unlockedSkills, options.source ?? "play");
   }
   return {
     modeId,
